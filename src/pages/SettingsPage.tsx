@@ -118,22 +118,24 @@ export function SettingsPage() {
         <div className="card">
           <h3>手机游玩 & 跨端同步</h3>
           <p className="muted">
-            进度存在浏览器本地。电脑和手机要一起玩，请打开<strong>同一个网址</strong>，并用下方备份在两端同步。
+            网站已可挂在公网（如 Vercel 的 https 链接）。
+            <strong>不需要同一 Wi‑Fi</strong>，手机/电脑只要能上网，打开同一个网址就能玩。
           </p>
           <ol className="guide-list">
             <li>
-              <strong>临时（同一 Wi‑Fi）</strong>
-              ：电脑运行 <code>npm run dev</code>，手机浏览器打开终端里的
-              Network 地址（如 http://192.168.x.x:5173）。
+              <strong>怎么玩</strong>
+              ：电脑和手机都打开你的 Vercel 链接（形如{' '}
+              <code>https://xxx.vercel.app</code>
+              ）。手机浏览器可「添加到主屏幕」。
             </li>
             <li>
-              <strong>随时可玩（推荐）</strong>
-              ：把项目部署到 Vercel，得到 https 链接；手机可「添加到主屏幕」。
+              <strong>进度不同步是正常的</strong>
+              ：存档存在各自浏览器里。换设备时用下方「复制进度 /
+              合并导入」（可用微信传）。
             </li>
             <li>
-              <strong>同步进度</strong>
-              ：在 A 设备「导出全部 / 复制进度」→ 用微信等发到 B 设备 →「导入 /
-              粘贴合并」。
+              <strong>两边都要填一次 API</strong>
+              ：设定里的 Key 也是存在本机的，新设备打开后重新填一下即可。
             </li>
           </ol>
         </div>
