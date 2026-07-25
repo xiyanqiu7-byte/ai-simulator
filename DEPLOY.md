@@ -1,86 +1,66 @@
-# 手机随时打开 · 部署指南（跟着做即可）
+# 跟着做：3 步让手机随时打开
 
-目标：得到一个网址，例如 `https://ai-simulator-xxx.vercel.app`，手机浏览器打开就能玩。
-
-你需要两个免费账号（如果已有可跳过注册）：
-
-1. **GitHub**（放代码）：https://github.com/signup
-2. **Vercel**（把网页挂上网）：https://vercel.com/signup  
-   → 选 **Continue with GitHub**，用同一个 GitHub 登录最省事。
+本地代码已经准备好（在 `C:\Users\28578\ai-simulator`）。你只需要在浏览器完成账号和点击部署。
 
 ---
 
-## 第一步：确认本机已准备好
+## 第 1 步：注册两个免费账号（约 5 分钟）
 
-在项目文件夹打开终端，应能运行：
+已尝试在浏览器打开注册页。若没有弹出，请手动打开：
 
-```bash
-git --version
-node -v
-```
+1. **GitHub（放代码）**  
+   https://github.com/signup  
+   - 邮箱注册即可  
+   - 若已有账号：直接登录 https://github.com/login
 
-如果还没有，已由助手帮你安装 Git / Node。
+2. **Vercel（挂上网）**  
+   https://vercel.com/signup  
+   - 务必点 **Continue with GitHub**（用同一个 GitHub 登录）  
+   - 按提示授权即可
 
----
-
-## 第二步：把代码推到 GitHub
-
-### 2.1 在 GitHub 新建空仓库
-
-1. 打开 https://github.com/new
-2. Repository name 填：`ai-simulator`（随便起名也可以）
-3. 选 **Public**
-4. **不要**勾选 “Add a README”
-5. 点 **Create repository**
-
-### 2.2 按页面提示推送（或让助手帮你执行）
-
-创建仓库后，GitHub 会显示类似命令。在 `C:\Users\28578\ai-simulator` 里执行：
-
-```bash
-git init
-git add .
-git commit -m "Initial commit: AI simulator reader"
-git branch -M main
-git remote add origin https://github.com/你的用户名/ai-simulator.git
-git push -u origin main
-```
-
-推送时浏览器可能会弹出登录 GitHub，按提示完成即可。
+做完第 1 步后，回复我一句：「账号好了」，并告诉我你的 **GitHub 用户名**（个人主页上的名字，例如 `zhangsan`）。
 
 ---
 
-## 第三步：用 Vercel 一键上线
+## 第 2 步：在 GitHub 新建空仓库
 
-1. 打开 https://vercel.com/new
-2. 用 GitHub 登录后，找到刚才的 `ai-simulator` 仓库，点 **Import**
-3. 框架会自动识别为 **Vite**，一般不用改
-4. 点 **Deploy**
-5. 等 1～2 分钟，出现 **Congratulations**
-6. 点开给的域名，复制下来，发到手机打开
+1. 打开：https://github.com/new  
+2. Repository name 填：`ai-simulator`  
+3. 选 **Public**  
+4. 下面的 README / .gitignore / license **都不要勾选**  
+5. 点绿色按钮 **Create repository**
 
-以后你改代码并 `git push`，Vercel 会自动重新部署。
+创建成功后页面会显示一个地址，类似：
 
----
+`https://github.com/你的用户名/ai-simulator.git`
 
-## 第四步：手机上更好用
-
-1. 用手机浏览器打开 Vercel 给你的链接
-2. Safari / Chrome 里选「添加到主屏幕」
-3. 在设定里填写 API Key（和电脑一样）
-4. 用「进度同步」在电脑和手机之间复制存档
-
-注意：电脑和手机的进度不会自动同步，玩完用设定页的「复制进度 / 合并导入」即可。
+把这个地址发给我，或只发用户名也可以，我帮你把电脑上的代码推上去。
 
 ---
 
-## 常见问题
+## 第 3 步：在 Vercel 一键上线
 
-**Q：Deploy 失败？**  
-看 Vercel 的 Build Logs。本项目是标准 Vite，一般直接成功。
+1. 打开：https://vercel.com/new  
+2. 在列表里找到 `ai-simulator`，点 **Import**  
+3. 什么都不用改，直接点 **Deploy**  
+4. 等 1～2 分钟出现成功页面  
+5. 点开域名（形如 `https://ai-simulator-xxxx.vercel.app`）  
+6. 用手机浏览器打开这个链接 → 可「添加到主屏幕」
 
-**Q：打开是空白页？**  
-确认 `vercel.json` 已在仓库里（本项目已包含）。
+---
 
-**Q：不想用 GitHub？**  
-也可以安装 Vercel CLI 后在本机登录部署，但 GitHub 方式最不容易出错，推荐用上面的流程。
+## 上线后怎么玩
+
+1. 手机打开链接 → **设定** 里填 API Key（和电脑一样）  
+2. 电脑上的存档不会自动出现，用 **设定 → 进度同步** 复制过去  
+3. 以后若改了代码，只要再 `git push`，网站会自动更新
+
+---
+
+## 你现在要做的事（最短）
+
+- [ ] 注册/登录 GitHub  
+- [ ] 用 GitHub 登录 Vercel  
+- [ ] 回复我：GitHub 用户名（或仓库地址）  
+
+我收到后帮你执行推送命令，然后告诉你怎么点 Deploy。
