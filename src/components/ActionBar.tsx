@@ -29,11 +29,12 @@ export function ActionBar({
           type="button"
           className="action-peek"
           onClick={onToggle}
+          aria-label="展开选项"
         >
           <span className="action-peek-bar" />
-          <span>滑到底或点此选择行动</span>
-          <span className="action-peek-count">
-            {options.length > 0 ? `${options.length} 个选项` : '自定义'}
+          <span className="action-peek-label">
+            选项
+            {options.length > 0 ? ` · ${options.length}` : ''}
           </span>
         </button>
       </div>

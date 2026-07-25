@@ -53,10 +53,19 @@ export function PlayPage() {
     if (!el) return;
 
     const check = () => {
-      const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
-      const atBottom = gap < 64;
-      if (!atBottom) {
-        userCollapsedRef.current = false;
+      const overflow = el.scrollHeight - el.clientHeight;
+      const gap = overflow - el.scrollTop;
+      // 内容几乎一屏装下时，不算「滑到底」，保持收起（需点提示条）
+      const canScroll = overflow > 48;
+      const atBottom = gap < 40;
+      const hasScrolled = el.scrollTop > 24;
+
+      if (!canScroll) {
+        // 不根据滚动自动展开；保留用户手动点开的状态
+        return;
+      }
+      if (!atBottom || !hasScrolled) {
+        if (!atBottom) userCollapsedRef.current = false;
         setActionsExpanded(false);
         return;
       }
@@ -69,7 +78,10 @@ export function PlayPage() {
 
     check();
     el.addEventListener('scroll', check, { passive: true });
-    const ro = new ResizeObserver(check);
+    const ro = new ResizeObserver(() => {
+      // 布局变化后重新判断，但短文仍不自动展开
+      check();
+    });
     ro.observe(el);
     return () => {
       el.removeEventListener('scroll', check);

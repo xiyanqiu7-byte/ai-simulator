@@ -148,7 +148,7 @@ a {
 }
 
 .stage-end-spacer {
-  height: 1.5rem;
+  height: 3rem;
 }
 
 .action-bar {
@@ -163,7 +163,7 @@ a {
 }
 
 .action-bar-collapsed {
-  padding: 0.35rem 0.85rem calc(0.45rem + var(--safe-bottom));
+  padding: 0.2rem 0.85rem calc(0.35rem + var(--safe-bottom));
 }
 
 .action-peek {
@@ -171,14 +171,14 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.55rem;
-  flex-direction: column;
+  gap: 0.4rem;
+  flex-direction: row;
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   cursor: pointer;
-  padding: 0.25rem 0;
+  padding: 0.35rem 0;
 }
 
 .action-peek-bar {
@@ -186,6 +186,12 @@ a {
   height: 0.28rem;
   border-radius: 999px;
   background: var(--border);
+}
+
+.action-peek-label {
+  color: var(--accent);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
 }
 
 .action-peek-count {
