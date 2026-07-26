@@ -7,7 +7,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: [
+        'favicon-32.png',
+        'apple-touch-icon.png',
+        'pwa-192.png',
+        'pwa-512.png',
+      ],
       manifest: {
         name: '模拟器阅读器',
         short_name: '模拟器',
@@ -22,11 +27,13 @@ export default defineConfig({
             src: 'pwa-192.png',
             sizes: '192x192',
             type: 'image/png',
+            purpose: 'any',
           },
           {
             src: 'pwa-512.png',
             sizes: '512x512',
             type: 'image/png',
+            purpose: 'any',
           },
         ],
       },
