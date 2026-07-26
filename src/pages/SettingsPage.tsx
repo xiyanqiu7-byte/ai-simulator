@@ -116,130 +116,29 @@ export function SettingsPage() {
         {msg ? <p className="muted">{msg}</p> : null}
 
         <div className="card">
-          <h3>手机游玩 & 跨端同步</h3>
+          <h3>游玩指南</h3>
           <p className="muted">
-            网站已可挂在公网（如 Vercel 的 https 链接）。
-            <strong>不需要同一 Wi‑Fi</strong>，手机/电脑只要能上网，打开同一个网址就能玩。
+            正式地址：
+            <a
+              href="https://ai-simulator-sooty.vercel.app/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              https://ai-simulator-sooty.vercel.app/
+            </a>
           </p>
           <ol className="guide-list">
-            <li>
-              <strong>怎么玩</strong>
-              ：电脑和手机都打开你的 Vercel 链接（形如{' '}
-              <code>https://xxx.vercel.app</code>
-              ）。手机浏览器可「添加到主屏幕」。
-            </li>
-            <li>
-              <strong>进度不同步是正常的</strong>
-              ：存档存在各自浏览器里。换设备时用下方「复制进度 /
-              合并导入」（可用微信传）。
-            </li>
-            <li>
-              <strong>两边都要填一次 API</strong>
-              ：设定里的 Key 也是存在本机的，新设备打开后重新填一下即可。
-            </li>
+            <li>手机、电脑随时打开上面的链接就能玩，不必两边同时在线。</li>
+            <li>手机浏览器可把页面「添加到主屏幕」，更像独立 App。</li>
+            <li>发给朋友也可以玩；每人在自己的设备上填自己的 API 即可。</li>
           </ol>
         </div>
 
         <div className="card">
-          <h3>进度同步</h3>
-          <p className="muted">
-            导出含模拟器包与全部存档。换设备玩完后记得再同步回来。
-          </p>
-          <label className="check-row">
-            <input
-              type="checkbox"
-              checked={includeApi}
-              onChange={(e) => setIncludeApi(e.target.checked)}
-            />
-            导出时包含 API Key（仅在信任的设备间勾选）
-          </label>
-          <div className="row-actions">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => {
-                exportFullBackup(includeApi);
-                setMsg('已下载全量备份 JSON');
-              }}
-            >
-              导出全部进度
-            </button>
-            <button type="button" className="btn" onClick={() => void copyBackup()}>
-              复制进度到剪贴板
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => backupRef.current?.click()}
-            >
-              从文件导入
-            </button>
-            <input
-              ref={backupRef}
-              type="file"
-              accept=".json,application/json"
-              hidden
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (!f) return;
-                void f.text().then((t) => doImportBackup(t, 'merge'));
-                e.target.value = '';
-              }}
-            />
-          </div>
-          <div className="field" style={{ marginTop: '0.75rem' }}>
-            <label>粘贴进度 JSON（另一台复制来的）</label>
-            <textarea
-              value={syncPaste}
-              onChange={(e) => setSyncPaste(e.target.value)}
-              placeholder="在此粘贴备份文本…"
-              className="fill-area"
-              style={{ minHeight: '6rem' }}
-            />
-          </div>
-          <div className="row-actions">
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={!syncPaste.trim()}
-              onClick={() => doImportBackup(syncPaste, 'merge')}
-            >
-              合并导入
-            </button>
-            <button
-              type="button"
-              className="btn btn-danger"
-              disabled={!syncPaste.trim()}
-              onClick={() => doImportBackup(syncPaste, 'replace')}
-            >
-              覆盖导入
-            </button>
-          </div>
-          {saves.length > 0 ? (
-            <details style={{ marginTop: '0.75rem' }}>
-              <summary className="muted">单独导出某个存档</summary>
-              {saves.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className="btn"
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    marginTop: '0.4rem',
-                  }}
-                  onClick={() => exportSaveJson(s)}
-                >
-                  导出：{s.name}
-                </button>
-              ))}
-            </details>
-          ) : null}
-        </div>
-
-        <div className="card">
           <h3>API</h3>
-          <p className="muted">Key 仅保存在本机浏览器，不会上传到本应用服务器。</p>
+          <p className="muted">
+            游玩需要使用你自己的 API（兼容 OpenAI 格式的接口均可）。
+          </p>
           <div className="field">
             <label>Base URL</label>
             <input
@@ -282,6 +181,9 @@ export function SettingsPage() {
           <button type="button" className="btn btn-primary" onClick={saveApi}>
             保存 API
           </button>
+          <p className="muted" style={{ marginTop: '0.75rem', marginBottom: 0 }}>
+            备注：存档与 API 都保存在本机浏览器。换手机/电脑接着玩时，请用页面最下方的「进度同步」。
+          </p>
         </div>
 
         <div className="card">
@@ -392,6 +294,103 @@ export function SettingsPage() {
             <p className="muted">打开某个存档后，可在此查看该模拟器原文规则。</p>
           )}
         </details>
+
+        <div className="card">
+          <h3>进度同步</h3>
+          <p className="muted">
+            换设备时：在这边导出/复制 → 用微信等传到另一台 → 粘贴后合并导入。不必两边同时打开。
+          </p>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={includeApi}
+              onChange={(e) => setIncludeApi(e.target.checked)}
+            />
+            导出时包含 API Key（仅在自己的设备间勾选）
+          </label>
+          <div className="row-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                exportFullBackup(includeApi);
+                setMsg('已下载全量备份 JSON');
+              }}
+            >
+              导出全部进度
+            </button>
+            <button type="button" className="btn" onClick={() => void copyBackup()}>
+              复制进度到剪贴板
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => backupRef.current?.click()}
+            >
+              从文件导入
+            </button>
+            <input
+              ref={backupRef}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                void f.text().then((t) => doImportBackup(t, 'merge'));
+                e.target.value = '';
+              }}
+            />
+          </div>
+          <div className="field" style={{ marginTop: '0.75rem' }}>
+            <label>粘贴进度 JSON</label>
+            <textarea
+              value={syncPaste}
+              onChange={(e) => setSyncPaste(e.target.value)}
+              placeholder="在此粘贴备份文本…"
+              className="fill-area"
+              style={{ minHeight: '6rem' }}
+            />
+          </div>
+          <div className="row-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!syncPaste.trim()}
+              onClick={() => doImportBackup(syncPaste, 'merge')}
+            >
+              合并导入
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger"
+              disabled={!syncPaste.trim()}
+              onClick={() => doImportBackup(syncPaste, 'replace')}
+            >
+              覆盖导入
+            </button>
+          </div>
+          {saves.length > 0 ? (
+            <details style={{ marginTop: '0.75rem' }}>
+              <summary className="muted">单独导出某个存档</summary>
+              {saves.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className="btn"
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    marginTop: '0.4rem',
+                  }}
+                  onClick={() => exportSaveJson(s)}
+                >
+                  导出：{s.name}
+                </button>
+              ))}
+            </details>
+          ) : null}
+        </div>
 
         <p
           className="muted"
