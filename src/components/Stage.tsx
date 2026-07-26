@@ -35,10 +35,9 @@ export const Stage = forwardRef<
   HTMLDivElement,
   {
     turn?: Turn | null;
-    loading?: boolean;
     children?: ReactNode;
   }
->(function Stage({ turn, loading, children }, ref) {
+>(function Stage({ turn, children }, ref) {
   return (
     <div className="stage" ref={ref}>
       {turn ? (
@@ -58,13 +57,6 @@ export const Stage = forwardRef<
               你的选择：{turn.playerChoice.label}
             </div>
           ) : null}
-        </>
-      ) : null}
-      {loading ? (
-        <>
-          <div className="skeleton" />
-          <div className="skeleton" style={{ height: '3rem' }} />
-          <p className="muted">本回合生成中…</p>
         </>
       ) : null}
       {children}

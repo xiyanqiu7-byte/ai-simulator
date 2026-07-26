@@ -38,12 +38,16 @@ export interface QuestionnaireField {
   required?: boolean;
 }
 
+/** form = fill before start; guided = AI runs onboarding then asks */
+export type SetupMode = 'form' | 'guided';
+
 export interface SimulatorPack {
   id: string;
   title: string;
   rawRules: string;
   /** One copyable block of blank titles for the player to fill in a single textarea */
   fillTemplate: string;
+  setupMode: SetupMode;
   importedAt: number;
 }
 
@@ -56,6 +60,7 @@ export interface SaveGame {
   packTitle: string;
   packRules: string;
   fillTemplate: string;
+  setupMode: SetupMode;
   characterNotes: string;
   phase: GamePhase;
   prologue?: string;

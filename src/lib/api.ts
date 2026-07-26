@@ -33,6 +33,8 @@ const OUTPUT_SCHEMA = `
 - 必须提供至少 3 个 options（A/B/C，建议含 D）。
 - 严格遵守模拟器原文的语言、视角、禁止项与格式要求。
 - 不要显示隐藏数值；不要上帝视角心理活动（除非模拟器允许）。
+- 【章节长度·硬性】凡「正式剧情回合」（含前置剧情、自由行动、随机事件、手机互动、重大决策等叙事推进）：blocks 内全部可读正文合计必须达到 2000～3000 汉字（约 2k～3k 字）。禁止水字数复读；用场景、对话、细节、手机界面推进写满。少于 2000 字视为不合格，须自行加长后再输出。
+- 【长度豁免】仅当本回合是开局仪式短步骤（欢迎语、选语言、提示「开始游戏」、空设定面板等、无实质剧情）时，可不遵守上述字数；一旦进入正式叙事，立即恢复 2k～3k 要求。
 `.trim();
 
 function compressRules(rules: string, max = 12000): string {
@@ -120,7 +122,27 @@ export async function generatePrologue(
   save: SaveGame,
 ): Promise<string> {
   const system = `${compressRules(save.packRules)}\n\n${OUTPUT_SCHEMA}`;
-  const user = `玩家已填写初始设定如下：\n${save.characterNotes}\n\n请生成「前置剧情 / 第一回合开场」（相遇或关系建立），phase 设为「前置剧情」。待玩家确认后才会进入正式回合。选项可以是确认进入游戏、微调设定相关的轻量选择。`;
+  const user = `玩家已填写初始设定如下：\n${save.characterNotes}\n\n请生成「前置剧情 / 第一回合开场」（相遇或关系建立），phase 设为「前置剧情」。待玩家确认后才会进入正式回合。选项可以是确认进入游戏、微调设定相关的轻量选择。\n本回合为正式叙事：blocks 正文合计须 2000～3000 字。`;
+  return chat(settings, [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ]);
+}
+
+/** AI-guided onboarding: welcome / language / 开始游戏 / settings panel */
+export async function generateOpening(
+  settings: ApiSettings,
+  save: SaveGame,
+): Promise<string> {
+  const system = `${compressRules(save.packRules)}\n\n${OUTPUT_SCHEMA}`;
+  const notes = save.characterNotes?.trim()
+    ? `玩家可选备注：\n${save.characterNotes}\n\n`
+    : '';
+  const user = `${notes}本模拟器由 AI 引导开局。请严格按规则原文的开局顺序执行第一步（如欢迎语、语言选择、提示输入「开始游戏」、设定面板等）。
+phase 设为「开局引导」。
+玩家尚未填写完整人设时，不要编造姓名/角色等完整设定；用选项或提示引导玩家下一步输入。
+必须提供 options（如语言选择、或「开始游戏」）。
+本步若仅为开局仪式短步骤，可短写；不要为凑字数灌水。`;
   return chat(settings, [
     { role: 'system', content: system },
     { role: 'user', content: user },
@@ -133,7 +155,8 @@ export async function generateTurn(
   instruction: string,
 ): Promise<string> {
   const system = `${compressRules(save.packRules)}\n\n${OUTPUT_SCHEMA}`;
-  const user = `【角色写入】\n${save.characterNotes}\n\n【历史】\n${buildHistory(save)}\n\n【本回合指令】\n${instruction}\n\n请推进下一回合，并给出选项。`;
+  const notes = save.characterNotes?.trim() || '（尚未填写完整角色写入）';
+  const user = `【角色写入】\n${notes}\n\n【历史】\n${buildHistory(save)}\n\n【本回合指令】\n${instruction}\n\n请推进下一回合，并给出选项。\n硬性要求：本回合 blocks 可读正文合计 2000～3000 汉字，禁止短章敷衍。`;
   return chat(settings, [
     { role: 'system', content: system },
     { role: 'user', content: user },
@@ -151,7 +174,7 @@ export async function regenerateOptions(
     )
     .join('\n');
   const system = `${compressRules(save.packRules)}\n\n${OUTPUT_SCHEMA}`;
-  const user = `当前回合内容如下，请保持叙事不变，只重新生成更好玩的 options（A-D），blocks 可原样返回或微调：\n标题：${turn.title}\n${body}\n\n角色写入：\n${save.characterNotes}`;
+  const user = `当前回合内容如下，请保持叙事不变，只重新生成更好玩的 options（A-D），blocks 可原样返回或微调（勿擅自大幅删减正文）：\n标题：${turn.title}\n${body}\n\n角色写入：\n${save.characterNotes}`;
   return chat(settings, [
     { role: 'system', content: system },
     { role: 'user', content: user },

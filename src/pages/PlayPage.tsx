@@ -14,10 +14,24 @@ export function PlayPage() {
   const [viewIndex, setViewIndex] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingLabel, setLoadingLabel] = useState('新章节生成中…');
   const [error, setError] = useState('');
   const [actionsExpanded, setActionsExpanded] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const userCollapsedRef = useRef(false);
+  const scrolledTurnRef = useRef<string | null>(null);
+
+  function beginLoading(label: string) {
+    setLoadingLabel(label);
+    setLoading(true);
+    setActionsExpanded(false);
+    setError('');
+  }
+
+  function scrollStageToTop() {
+    const el = stageRef.current;
+    if (el) el.scrollTop = 0;
+  }
 
   useEffect(() => {
     if (!activeSave) nav('/');
@@ -41,53 +55,25 @@ export function PlayPage() {
     }
   }, [activeSave?.id]);
 
+  // 换章后滚到标题（只滚一次，避免和用户下滑抢位置）
   useEffect(() => {
+    if (loading) return;
+    const id = currentTurn?.id;
+    if (!id) return;
+    if (loadingLabel.includes('选项')) return;
+    if (scrolledTurnRef.current === id) return;
+    scrolledTurnRef.current = id;
     userCollapsedRef.current = false;
     setActionsExpanded(false);
-    const el = stageRef.current;
-    if (el) el.scrollTop = 0;
-  }, [currentTurn?.id]);
+    scrollStageToTop();
+    const t = window.setTimeout(scrollStageToTop, 32);
+    return () => window.clearTimeout(t);
+  }, [currentTurn?.id, loading, loadingLabel]);
 
+  // 不再随滚动自动展开选项，避免挡住未读完的正文
   useEffect(() => {
-    const el = stageRef.current;
-    if (!el) return;
-
-    const check = () => {
-      const overflow = el.scrollHeight - el.clientHeight;
-      const gap = overflow - el.scrollTop;
-      // 内容几乎一屏装下时，不算「滑到底」，保持收起（需点提示条）
-      const canScroll = overflow > 48;
-      const atBottom = gap < 40;
-      const hasScrolled = el.scrollTop > 24;
-
-      if (!canScroll) {
-        // 不根据滚动自动展开；保留用户手动点开的状态
-        return;
-      }
-      if (!atBottom || !hasScrolled) {
-        if (!atBottom) userCollapsedRef.current = false;
-        setActionsExpanded(false);
-        return;
-      }
-      if (userCollapsedRef.current) {
-        setActionsExpanded(false);
-        return;
-      }
-      setActionsExpanded(true);
-    };
-
-    check();
-    el.addEventListener('scroll', check, { passive: true });
-    const ro = new ResizeObserver(() => {
-      // 布局变化后重新判断，但短文仍不自动展开
-      check();
-    });
-    ro.observe(el);
-    return () => {
-      el.removeEventListener('scroll', check);
-      ro.disconnect();
-    };
-  }, [currentTurn?.id, loading, atLatest]);
+    if (loading) setActionsExpanded(false);
+  }, [loading]);
 
   if (!activeSave) return null;
 
@@ -104,17 +90,12 @@ export function PlayPage() {
         return false;
       }
       userCollapsedRef.current = false;
-      const el = stageRef.current;
-      if (el) {
-        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-      }
       return true;
     });
   }
 
   async function runGeneration(save: SaveGame, instruction: string) {
-    setLoading(true);
-    setError('');
+    beginLoading('新章节生成中…');
     try {
       const raw = await generateTurn(api, save, instruction);
       const nextIndex =
@@ -128,6 +109,8 @@ export function PlayPage() {
         turns: [...save.turns, turn],
         updatedAt: Date.now(),
       };
+      // 允许下一回合的滚顶 effect 再触发
+      scrolledTurnRef.current = null;
       persistSave(next);
       setViewIndex(turn.index);
     } catch (e) {
@@ -224,8 +207,7 @@ export function PlayPage() {
 
   async function onRegen() {
     if (!activeSave || !currentTurn || loading) return;
-    setLoading(true);
-    setError('');
+    beginLoading('选项重新生成中…');
     try {
       const raw = await regenerateOptions(api, activeSave, currentTurn);
       const parsed = parseModelTurn(raw);
@@ -253,7 +235,7 @@ export function PlayPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page page-play">
       <header className="topbar">
         <div className="topbar-left">
           <Link to="/" className="icon-btn" style={{ textDecoration: 'none' }}>
@@ -276,7 +258,7 @@ export function PlayPage() {
         </Link>
       </header>
 
-      <Stage ref={stageRef} turn={currentTurn} loading={loading}>
+      <Stage key={currentTurn?.id ?? 'empty'} ref={stageRef} turn={currentTurn}>
         {error ? <p className="error">{error}</p> : null}
         {viewingHistory ? (
           <p className="muted">
@@ -312,7 +294,7 @@ export function PlayPage() {
           onCustom={onCustom}
           showRegen
           onRegenOptions={onRegen}
-          expanded={actionsExpanded}
+          expanded={actionsExpanded && !loading}
           onToggle={toggleActions}
         />
       ) : (
@@ -327,6 +309,15 @@ export function PlayPage() {
           </button>
         </div>
       )}
+
+      {loading ? (
+        <div className="gen-overlay" role="status" aria-live="polite">
+          <div className="gen-overlay-card">
+            <span className="gen-overlay-pulse" aria-hidden />
+            <p>{loadingLabel}</p>
+          </div>
+        </div>
+      ) : null}
 
       <TurnSheet
         open={sheetOpen}

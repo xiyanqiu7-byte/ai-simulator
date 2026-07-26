@@ -243,7 +243,10 @@ export function SettingsPage() {
             >
               <strong>{p.title}</strong>
               <div className="muted">
-                提纲约 {p.fillTemplate.split('\n').filter(Boolean).length} 行
+                {p.setupMode === 'guided' ? 'AI 引导开局' : '开局前填表'}
+                {p.fillTemplate
+                  ? ` · 提纲约 ${p.fillTemplate.split('\n').filter(Boolean).length} 行`
+                  : ''}
               </div>
               <button
                 type="button"

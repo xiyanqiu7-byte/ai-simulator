@@ -1,6 +1,6 @@
 import type { ApiSettings, SaveGame, SimulatorPack } from '../types';
 import { DEFAULT_API, STORAGE_KEYS } from '../types';
-import { extractFillTemplate } from './pack';
+import { analyzePackRules, inferPackTitle } from './pack';
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -28,10 +28,26 @@ export function loadPacks(): SimulatorPack[] {
   const packs = readJson<SimulatorPack[]>(STORAGE_KEYS.packs, []);
   let dirty = false;
   const migrated = packs.map((p) => {
-    const nextTemplate = extractFillTemplate(p.rawRules || '');
-    if (p.fillTemplate === nextTemplate) return p;
+    const analysis = analyzePackRules(p.rawRules || '');
+    const needTitle =
+      !p.title?.trim() ||
+      p.title === '未命名模拟器' ||
+      p.title === '未命名模擬器';
+    const title = needTitle ? inferPackTitle(p.rawRules || '') : p.title;
+    if (
+      p.fillTemplate === analysis.fillTemplate &&
+      p.setupMode === analysis.setupMode &&
+      p.title === title
+    ) {
+      return p;
+    }
     dirty = true;
-    return { ...p, fillTemplate: nextTemplate };
+    return {
+      ...p,
+      title,
+      fillTemplate: analysis.fillTemplate,
+      setupMode: analysis.setupMode,
+    };
   });
   if (dirty) savePacks(migrated);
   return migrated;
@@ -41,8 +57,26 @@ export function savePacks(packs: SimulatorPack[]) {
   writeJson(STORAGE_KEYS.packs, packs);
 }
 
+function normalizeSave(s: SaveGame): SaveGame {
+  if (s.setupMode) return s;
+  const analysis = analyzePackRules(s.packRules || '');
+  return {
+    ...s,
+    setupMode: analysis.setupMode,
+    fillTemplate: s.fillTemplate || analysis.fillTemplate,
+  };
+}
+
 export function loadSaves(): SaveGame[] {
-  return readJson(STORAGE_KEYS.saves, []);
+  const saves = readJson<SaveGame[]>(STORAGE_KEYS.saves, []);
+  let dirty = false;
+  const migrated = saves.map((s) => {
+    if (s.setupMode) return s;
+    dirty = true;
+    return normalizeSave(s);
+  });
+  if (dirty) saveSaves(migrated);
+  return migrated;
 }
 
 export function saveSaves(saves: SaveGame[]) {
@@ -139,23 +173,40 @@ export function parseBackup(raw: string): FullBackup {
   throw new Error('无法识别的备份文件');
 }
 
+function normalizePack(p: SimulatorPack): SimulatorPack {
+  const analysis = analyzePackRules(p.rawRules || '');
+  const needTitle =
+    !p.title?.trim() ||
+    p.title === '未命名模拟器' ||
+    p.title === '未命名模擬器';
+  return {
+    ...p,
+    title: needTitle ? inferPackTitle(p.rawRules || '') : p.title,
+    fillTemplate: analysis.fillTemplate,
+    setupMode: analysis.setupMode,
+  };
+}
+
 export function applyFullBackup(
   backup: FullBackup,
   mode: 'merge' | 'replace',
 ): { saves: number; packs: number } {
+  const packsIn = (backup.packs || []).map(normalizePack);
+  const savesIn = (backup.saves || []).map(normalizeSave);
+
   if (mode === 'replace') {
-    savePacks(backup.packs || []);
-    saveSaves(backup.saves || []);
-    setActiveSaveId(backup.activeSaveId ?? backup.saves?.[0]?.id ?? null);
+    savePacks(packsIn);
+    saveSaves(savesIn);
+    setActiveSaveId(backup.activeSaveId ?? savesIn[0]?.id ?? null);
   } else {
     const packs = loadPacks();
     const packMap = new Map(packs.map((p) => [p.id, p]));
-    for (const p of backup.packs || []) packMap.set(p.id, p);
+    for (const p of packsIn) packMap.set(p.id, p);
     savePacks([...packMap.values()]);
 
     const saves = loadSaves();
     const saveMap = new Map(saves.map((s) => [s.id, s]));
-    for (const s of backup.saves || []) {
+    for (const s of savesIn) {
       const prev = saveMap.get(s.id);
       if (!prev || (s.updatedAt || 0) >= (prev.updatedAt || 0)) {
         saveMap.set(s.id, s);
@@ -173,7 +224,7 @@ export function applyFullBackup(
   }
 
   return {
-    saves: (backup.saves || []).length,
-    packs: (backup.packs || []).length,
+    saves: savesIn.length,
+    packs: packsIn.length,
   };
 }

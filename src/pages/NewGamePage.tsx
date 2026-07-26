@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { generatePrologue } from '../lib/api';
+import { generateOpening, generatePrologue } from '../lib/api';
 import { parseModelTurn, toTurn } from '../lib/parseTurn';
 import { useStore } from '../store';
-import type { SaveGame } from '../types';
+import type { SaveGame, SetupMode } from '../types';
 
 export function NewGamePage() {
   const { packs, persistSave } = useStore();
@@ -25,6 +25,7 @@ export function NewGamePage() {
       packTitle: pack.title,
       packRules: pack.rawRules,
       fillTemplate: pack.fillTemplate || '',
+      setupMode: pack.setupMode || 'form',
       characterNotes: '',
       phase: 'setup',
       turns: [],
@@ -71,10 +72,14 @@ export function NewGamePage() {
             {packs.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.title}
+                {p.setupMode === 'guided' ? '（AI 引导开局）' : ''}
               </option>
             ))}
           </select>
         </div>
+        {pack?.setupMode === 'guided' ? (
+          <p className="muted">此模拟器由 AI 按规则引导开局，无需预先填完整人设。</p>
+        ) : null}
         <div className="field">
           <label>存档名称</label>
           <input
@@ -84,7 +89,7 @@ export function NewGamePage() {
           />
         </div>
         <button type="button" className="btn btn-primary" onClick={start} disabled={!pack}>
-          填写角色设定
+          {pack?.setupMode === 'guided' ? '进入开局' : '填写角色设定'}
         </button>
       </div>
     </div>
@@ -109,11 +114,12 @@ export function SetupPage() {
     );
   }
 
-  const template =
-    activeSave.fillTemplate?.trim() ||
-    `姓名：\n年龄：\n身份：\n特殊设定 / 要求：\n`;
+  const mode: SetupMode = activeSave.setupMode || 'form';
+  const template = activeSave.fillTemplate?.trim() || '';
+  const isGuided = mode === 'guided';
 
   async function copyTemplate() {
+    if (!template) return;
     try {
       await navigator.clipboard.writeText(template);
       setCopied(true);
@@ -123,11 +129,13 @@ export function SetupPage() {
     }
   }
 
-  async function submit() {
+  async function startGame(forceGuided: boolean) {
     if (!activeSave) return;
     setError('');
     const text = notes.trim();
-    if (!text) {
+    const useGuided = forceGuided || isGuided;
+
+    if (!useGuided && !text) {
       setError('请先填写设定（可点上方提纲复制后再填）');
       return;
     }
@@ -138,17 +146,20 @@ export function SetupPage() {
 
     const draft: SaveGame = {
       ...activeSave,
+      setupMode: useGuided ? 'guided' : 'form',
       characterNotes: text,
       updatedAt: Date.now(),
     };
     persistSave(draft);
     setLoading(true);
     try {
-      const raw = await generatePrologue(api, draft);
+      const raw = useGuided
+        ? await generateOpening(api, draft)
+        : await generatePrologue(api, draft);
       const turn = toTurn(parseModelTurn(raw), 0);
       persistSave({
         ...draft,
-        phase: 'prologue',
+        phase: useGuided ? 'playing' : 'prologue',
         prologue: raw,
         turns: [turn],
         updatedAt: Date.now(),
@@ -167,47 +178,105 @@ export function SetupPage() {
         <Link to="/" className="icon-btn" style={{ textDecoration: 'none' }}>
           大厅
         </Link>
-        <h1>角色设定</h1>
+        <h1>{isGuided ? '开局' : '角色设定'}</h1>
         <span style={{ width: '2.4rem' }} />
       </header>
       <div className="panel">
         <p className="muted">{activeSave.packTitle}</p>
-        <p className="muted" style={{ marginBottom: '0.65rem' }}>
-          上方是填写提纲（整段）。点一下复制，贴到下方大框里写。
-          若有【请选择】A/B/C/D（如风格、浓度），也在「我的选择：」后面写上即可。
-        </p>
 
-        <button
-          type="button"
-          className="fill-template"
-          onClick={() => void copyTemplate()}
-          title="点击复制"
-        >
-          <div className="fill-template-hint">
-            {copied ? '已复制' : '点击复制提纲'}
-          </div>
-          <pre>{template}</pre>
-        </button>
-
-        <div className="field" style={{ marginTop: '1rem' }}>
-          <label>你的设定（一整段）</label>
-          <textarea
-            className="fill-area"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="点上方复制提纲，粘贴到这里，在冒号后接着写…"
-          />
-        </div>
-
-        {error ? <p className="error">{error}</p> : null}
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={loading}
-          onClick={() => void submit()}
-        >
-          {loading ? '生成前置剧情…' : '生成前置剧情'}
-        </button>
+        {isGuided ? (
+          <>
+            <p className="muted" style={{ marginBottom: '0.65rem' }}>
+              本模拟器由 AI 按规则引导开局（欢迎 / 语言 /「开始游戏」/ 设定面板等），无需预先填完整人设。
+              用底部选项或自定义输入推进即可。
+            </p>
+            {template ? (
+              <details className="card collapsible" style={{ marginBottom: '0.75rem' }}>
+                <summary>开局后可能问到的字段（参考，可复制）</summary>
+                <button
+                  type="button"
+                  className="fill-template"
+                  onClick={() => void copyTemplate()}
+                  title="点击复制"
+                  style={{ marginTop: '0.5rem' }}
+                >
+                  <div className="fill-template-hint">
+                    {copied ? '已复制' : '点击复制提纲'}
+                  </div>
+                  <pre>{template}</pre>
+                </button>
+              </details>
+            ) : null}
+            <div className="field">
+              <label>可选备注</label>
+              <textarea
+                className="fill-area"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="有想提前告诉 AI 的可写这里，一般留空即可…"
+                style={{ minHeight: '6rem' }}
+              />
+            </div>
+            {error ? <p className="error">{error}</p> : null}
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={loading}
+              onClick={() => void startGame(true)}
+            >
+              {loading ? '开局中…' : '开始游戏'}
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="muted" style={{ marginBottom: '0.65rem' }}>
+              上方是填写提纲（整段）。点一下复制，贴到下方大框里写。
+              若有【请选择】A/B/C/D，也在「我的选择：」后面写上即可。
+            </p>
+            {template ? (
+              <button
+                type="button"
+                className="fill-template"
+                onClick={() => void copyTemplate()}
+                title="点击复制"
+              >
+                <div className="fill-template-hint">
+                  {copied ? '已复制' : '点击复制提纲'}
+                </div>
+                <pre>{template}</pre>
+              </button>
+            ) : (
+              <p className="muted">未识别到提纲，可直接在下方自由填写。</p>
+            )}
+            <div className="field" style={{ marginTop: '1rem' }}>
+              <label>你的设定（一整段）</label>
+              <textarea
+                className="fill-area"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="点上方复制提纲，粘贴到这里，在冒号后接着写…"
+              />
+            </div>
+            {error ? <p className="error">{error}</p> : null}
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={loading}
+              onClick={() => void startGame(false)}
+            >
+              {loading ? '生成前置剧情…' : '生成前置剧情'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ marginTop: '0.5rem', width: '100%' }}
+              disabled={loading}
+              onClick={() => void startGame(true)}
+            >
+              跳过，让 AI 开局提问
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
