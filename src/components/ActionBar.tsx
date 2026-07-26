@@ -10,17 +10,22 @@ export function ActionBar({
   showRegen,
   expanded,
   onToggle,
+  customValue,
+  onCustomChange,
 }: {
   options: TurnOption[];
   disabled?: boolean;
-  onChoose: (opt: TurnOption) => void;
-  onCustom: (text: string) => void;
+  onChoose: (opt: TurnOption) => void | Promise<void>;
+  /** 成功返回 true（清空输入）；失败返回 false（保留输入） */
+  onCustom: (text: string) => boolean | Promise<boolean>;
   onRegenOptions?: () => void;
   showRegen?: boolean;
   expanded: boolean;
   onToggle: () => void;
+  customValue: string;
+  onCustomChange: (value: string) => void;
 }) {
-  const [custom, setCustom] = useState('');
+  const [sending, setSending] = useState(false);
 
   if (!expanded) {
     return (
@@ -35,6 +40,7 @@ export function ActionBar({
           <span className="action-peek-label">
             选项
             {options.length > 0 ? ` · ${options.length}` : ''}
+            {customValue.trim() ? ' · 有草稿' : ''}
           </span>
         </button>
       </div>
@@ -59,8 +65,8 @@ export function ActionBar({
               key={opt.key}
               type="button"
               className="option-btn"
-              disabled={disabled}
-              onClick={() => onChoose(opt)}
+              disabled={disabled || sending}
+              onClick={() => void onChoose(opt)}
             >
               <span className="key">{opt.key}</span>
               {opt.text}
@@ -79,7 +85,7 @@ export function ActionBar({
           <button
             type="button"
             className="btn btn-ghost"
-            disabled={disabled}
+            disabled={disabled || sending}
             onClick={onRegenOptions}
           >
             重新生成选项
@@ -91,17 +97,24 @@ export function ActionBar({
         className="custom-row"
         onSubmit={(e) => {
           e.preventDefault();
-          const t = custom.trim();
-          if (!t || disabled) return;
-          onCustom(t);
-          setCustom('');
+          const t = customValue.trim();
+          if (!t || disabled || sending) return;
+          void (async () => {
+            setSending(true);
+            try {
+              const ok = await onCustom(t);
+              if (ok) onCustomChange('');
+            } finally {
+              setSending(false);
+            }
+          })();
         }}
       >
         <input
-          value={custom}
-          onChange={(e) => setCustom(e.target.value)}
+          value={customValue}
+          onChange={(e) => onCustomChange(e.target.value)}
           placeholder="自定义行动…"
-          disabled={disabled}
+          disabled={disabled || sending}
           enterKeyHint="send"
           onFocus={() => {
             if (!expanded) onToggle();
@@ -110,7 +123,7 @@ export function ActionBar({
         <button
           type="submit"
           className="btn btn-primary"
-          disabled={disabled || !custom.trim()}
+          disabled={disabled || sending || !customValue.trim()}
         >
           发送
         </button>

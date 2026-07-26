@@ -76,6 +76,10 @@ function buildHistory(save: SaveGame): string {
   return `更早回合摘要：\n${olderText}\n\n最近回合全文：\n${recentText}`;
 }
 
+async function sleep(ms: number) {
+  return new Promise((r) => window.setTimeout(r, ms));
+}
+
 async function chat(
   settings: ApiSettings,
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
@@ -85,36 +89,67 @@ async function chat(
   }
   const base = settings.baseUrl.replace(/\/+$/, '');
   const url = `${base}/chat/completions`;
+  const body = JSON.stringify({
+    model: settings.model,
+    temperature: settings.temperature,
+    messages,
+  });
 
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${settings.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: settings.model,
-        temperature: settings.temperature,
-        messages,
-      }),
-    });
-  } catch {
-    throw new ApiError('网络请求失败，请检查 Base URL 或跨域设置');
+  const maxAttempts = 3;
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${settings.apiKey}`,
+        },
+        body,
+        // 降低切后台时请求被立刻掐断的概率（仍无法保证锁屏永不失败）
+        keepalive: true,
+      });
+    } catch {
+      lastError = new ApiError(
+        attempt < maxAttempts
+          ? `网络中断，正在重试（${attempt}/${maxAttempts}）…`
+          : '网络请求失败（可能因锁屏或切到其他应用）。请保持本页在前台，或点重试。',
+      );
+      if (attempt < maxAttempts) {
+        await sleep(800 * attempt);
+        continue;
+      }
+      throw lastError;
+    }
+
+    if (res.status === 429 || res.status >= 500) {
+      const errText = await res.text().catch(() => '');
+      lastError = new ApiError(
+        `API 错误 ${res.status}：${errText.slice(0, 160)}`,
+      );
+      if (attempt < maxAttempts) {
+        await sleep(1000 * attempt);
+        continue;
+      }
+      throw lastError;
+    }
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new ApiError(`API 错误 ${res.status}：${errText.slice(0, 200)}`);
+    }
+
+    const data = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) throw new ApiError('模型返回为空');
+    return content;
   }
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new ApiError(`API 错误 ${res.status}：${errText.slice(0, 200)}`);
-  }
-
-  const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new ApiError('模型返回为空');
-  return content;
+  throw lastError ?? new ApiError('生成失败');
 }
 
 export async function generatePrologue(

@@ -117,7 +117,7 @@ export function SettingsPage() {
 
         <div className="card">
           <h3>游玩指南</h3>
-          <p className="muted">
+          <p className="muted" style={{ marginBottom: '0.65rem' }}>
             正式地址：
             <a
               href="https://ai-simulator-sooty.vercel.app/"
@@ -126,12 +126,38 @@ export function SettingsPage() {
             >
               https://ai-simulator-sooty.vercel.app/
             </a>
+            <br />
+            这是一个「模拟器阅读器」：把长规则玩法贴进来，按章节阅读、点选项推进——不用在聊天框里翻历史、也不容易把设定玩丢。
           </p>
           <ol className="guide-list">
-            <li>手机、电脑随时打开上面的链接就能玩，不必两边同时在线。</li>
-            <li>手机浏览器可把页面「添加到主屏幕」，更像独立 App。</li>
-            <li>发给朋友也可以玩；每人在自己的设备上填自己的 API 即可。</li>
+            <li>
+              <strong>填 API</strong>
+              ：在下方填入你自己的接口（兼容 OpenAI 格式即可），点「保存 API」。Key 只存在本机。
+            </li>
+            <li>
+              <strong>导入玩法</strong>
+              ：把完整模拟器规则（Markdown）粘贴到「导入模拟器」，或选文件导入。
+            </li>
+            <li>
+              <strong>开新局</strong>
+              ：回大厅点「新建对局」→ 选模拟器。有的要先填人设提纲，有的由 AI 引导开局（欢迎语 /「开始游戏」等），按页面提示即可。
+            </li>
+            <li>
+              <strong>边读边玩</strong>
+              ：正文像小说一样往下读；读完点底部「选项」，或自己写行动发送。生成新章节时尽量别锁屏、别切走。
+            </li>
+            <li>
+              <strong>翻以前的回合</strong>
+              ：左上「回合」可回看历史章节；看完点「回到最新」继续玩。
+            </li>
+            <li>
+              <strong>换手机 / 换浏览器</strong>
+              ：进度在本机，不自动上云。请用本页最下方「进度同步」导出备份再导入。桌面快捷方式与普通浏览器有时是两套存档，删入口前务必先备份。
+            </li>
           </ol>
+          <p className="muted" style={{ marginBottom: 0 }}>
+            手机可将页面「添加到主屏幕」，更像独立 App；链接也可发给朋友，每人用自己的 API。
+          </p>
         </div>
 
         <div className="card">
@@ -193,7 +219,7 @@ export function SettingsPage() {
             <textarea
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
-              placeholder="把「港娱孩子模拟器」等整份玩法贴进来…"
+              placeholder="把嫂嫂模拟器等整份玩法贴进来…"
             />
           </div>
           <div className="row-actions">
