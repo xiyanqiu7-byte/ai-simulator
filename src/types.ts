@@ -27,6 +27,8 @@ export interface Turn {
     label: string;
   };
   summary: string;
+  /** 本回合写入的连贯增量（可选） */
+  continuityDelta?: string;
   createdAt: number;
 }
 
@@ -62,6 +64,11 @@ export interface SaveGame {
   fillTemplate: string;
   setupMode: SetupMode;
   characterNotes: string;
+  /**
+   * 滚动连贯笔记：关系变化、新认知、未竟冲突等（由模型每回合 continuityDelta 累积）
+   * 用于减轻长线复读与设定漂移
+   */
+  continuityNotes?: string;
   phase: GamePhase;
   prologue?: string;
   turns: Turn[];
@@ -86,9 +93,47 @@ export const DEFAULT_API: ApiSettings = {
   temperature: 0.85,
 };
 
+/** 推进节奏 */
+export type PacePref = 'plot' | 'balanced' | 'texture';
+
+/** 描写侧重（可多选） */
+export type FocusPref =
+  | 'atmosphere'
+  | 'psychology'
+  | 'plotBeat'
+  | 'dialogue'
+  | 'sensory'
+  | 'relationship';
+
+export interface PlayerPrefs {
+  pace: PacePref;
+  focus: FocusPref[];
+}
+
+export const DEFAULT_PLAYER_PREFS: PlayerPrefs = {
+  pace: 'balanced',
+  focus: [],
+};
+
+export const PACE_OPTIONS: { id: PacePref; label: string; hint: string }[] = [
+  { id: 'plot', label: '多事件', hint: '少空转，优先剧情节点与选择后果' },
+  { id: 'balanced', label: '均衡', hint: '推进与描写大致平衡' },
+  { id: 'texture', label: '多铺陈', hint: '可多氛围细节，仍禁止复读同一桥段' },
+];
+
+export const FOCUS_OPTIONS: { id: FocusPref; label: string }[] = [
+  { id: 'atmosphere', label: '环境氛围' },
+  { id: 'psychology', label: '细腻心理' },
+  { id: 'plotBeat', label: '剧情节拍' },
+  { id: 'dialogue', label: '对话驱动' },
+  { id: 'sensory', label: '感官细节' },
+  { id: 'relationship', label: '人物关系张力' },
+];
+
 export const STORAGE_KEYS = {
   api: 'simreader.api',
   packs: 'simreader.packs',
   saves: 'simreader.saves',
   activeSaveId: 'simreader.activeSaveId',
+  prefs: 'simreader.prefs',
 } as const;

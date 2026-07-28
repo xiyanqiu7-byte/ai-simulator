@@ -4,7 +4,7 @@ import { ActionBar } from '../components/ActionBar';
 import { Stage } from '../components/Stage';
 import { TurnSheet } from '../components/TurnSheet';
 import { generateTurn, regenerateOptions } from '../lib/api';
-import { parseModelTurn, toTurn } from '../lib/parseTurn';
+import { parseModelTurn, toTurn, mergeContinuityNotes } from '../lib/parseTurn';
 import { useStore } from '../store';
 import type { SaveGame, Turn, TurnOption } from '../types';
 
@@ -222,11 +222,20 @@ export function PlayPage() {
         save.turns.length === 0
           ? 1
           : save.turns[save.turns.length - 1].index + 1;
-      const turn = toTurn(parseModelTurn(raw), nextIndex);
+      const parsed = parseModelTurn(raw);
+      const turn = toTurn(parsed, nextIndex);
+      const refreshContinuity =
+        save.turns.length > 0 && save.turns.length % 5 === 0;
       const next: SaveGame = {
         ...save,
         phase: 'playing',
         turns: [...save.turns, turn],
+        continuityNotes: mergeContinuityNotes(
+          save.continuityNotes,
+          parsed.continuityDelta,
+          nextIndex,
+          refreshContinuity,
+        ),
         updatedAt: Date.now(),
       };
       scrolledTurnRef.current = null;

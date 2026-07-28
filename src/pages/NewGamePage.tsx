@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { generateOpening, generatePrologue } from '../lib/api';
-import { parseModelTurn, toTurn } from '../lib/parseTurn';
+import { parseModelTurn, toTurn, mergeContinuityNotes } from '../lib/parseTurn';
 import { useStore } from '../store';
 import type { SaveGame, SetupMode } from '../types';
 
@@ -156,12 +156,19 @@ export function SetupPage() {
       const raw = useGuided
         ? await generateOpening(api, draft)
         : await generatePrologue(api, draft);
-      const turn = toTurn(parseModelTurn(raw), 0);
+      const parsed = parseModelTurn(raw);
+      const turn = toTurn(parsed, 0);
       persistSave({
         ...draft,
         phase: useGuided ? 'playing' : 'prologue',
         prologue: raw,
         turns: [turn],
+        continuityNotes: mergeContinuityNotes(
+          draft.continuityNotes,
+          parsed.continuityDelta,
+          0,
+          false,
+        ),
         updatedAt: Date.now(),
       });
       nav('/play');

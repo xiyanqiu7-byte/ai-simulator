@@ -9,12 +9,15 @@ import {
   parseBackup,
 } from '../lib/storage';
 import { useStore } from '../store';
-import type { ApiSettings } from '../types';
+import type { ApiSettings, FocusPref, PacePref, PlayerPrefs } from '../types';
+import { FOCUS_OPTIONS, PACE_OPTIONS } from '../types';
 
 export function SettingsPage() {
   const {
     api,
     setApi,
+    prefs,
+    setPrefs,
     packs,
     addPack,
     removePack,
@@ -24,6 +27,7 @@ export function SettingsPage() {
     refresh,
   } = useStore();
   const [draft, setDraft] = useState<ApiSettings>(api);
+  const [prefsDraft, setPrefsDraft] = useState<PlayerPrefs>(prefs);
   const [importText, setImportText] = useState('');
   const [msg, setMsg] = useState('');
   const [notes, setNotes] = useState(activeSave?.characterNotes ?? '');
@@ -36,6 +40,21 @@ export function SettingsPage() {
   function saveApi() {
     setApi(draft);
     setMsg('API 设定已保存到本机');
+  }
+
+  function savePrefs() {
+    setPrefs(prefsDraft);
+    setMsg('阅读偏好已保存（下一回合生成起生效）');
+  }
+
+  function toggleFocus(id: FocusPref) {
+    setPrefsDraft((prev) => {
+      const has = prev.focus.includes(id);
+      return {
+        ...prev,
+        focus: has ? prev.focus.filter((f) => f !== id) : [...prev.focus, id],
+      };
+    });
   }
 
   function importMd() {
@@ -210,6 +229,52 @@ export function SettingsPage() {
           <p className="muted" style={{ marginTop: '0.75rem', marginBottom: 0 }}>
             备注：存档与 API 都保存在本机浏览器。换手机/电脑接着玩时，请用页面最下方的「进度同步」。
           </p>
+        </div>
+
+        <div className="card">
+          <h3>阅读偏好</h3>
+          <p className="muted">
+            影响叙述侧重点（软约束）。规则禁止项优先；改完请保存，下一回合生成起生效。可随时改，不行就勾回去。
+          </p>
+          <div className="field">
+            <label>推进偏好</label>
+            <div className="pref-options">
+              {PACE_OPTIONS.map((opt) => (
+                <label key={opt.id} className="pref-chip">
+                  <input
+                    type="radio"
+                    name="pace"
+                    checked={prefsDraft.pace === opt.id}
+                    onChange={() =>
+                      setPrefsDraft((p) => ({ ...p, pace: opt.id as PacePref }))
+                    }
+                  />
+                  <span>
+                    <strong>{opt.label}</strong>
+                    <small>{opt.hint}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="field">
+            <label>描写侧重（可多选，可不选）</label>
+            <div className="pref-checks">
+              {FOCUS_OPTIONS.map((opt) => (
+                <label key={opt.id} className="pref-check">
+                  <input
+                    type="checkbox"
+                    checked={prefsDraft.focus.includes(opt.id)}
+                    onChange={() => toggleFocus(opt.id)}
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <button type="button" className="btn btn-primary" onClick={savePrefs}>
+            保存阅读偏好
+          </button>
         </div>
 
         <div className="card">
@@ -428,11 +493,11 @@ export function SettingsPage() {
             tapCount.current += 1;
             if (tapCount.current >= 5) {
               tapCount.current = 0;
-              setMsg('版本 0.1.0 · 本地 PWA');
+              setMsg('版本 0.2.0 · 本地 PWA');
             }
           }}
         >
-          v0.1.0
+          v0.2.0
         </p>
       </div>
     </div>

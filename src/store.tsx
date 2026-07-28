@@ -6,25 +6,29 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { ApiSettings, SaveGame, SimulatorPack } from './types';
+import type { ApiSettings, PlayerPrefs, SaveGame, SimulatorPack } from './types';
 import {
   deleteSave,
   getActiveSaveId,
   loadApiSettings,
   loadPacks,
+  loadPlayerPrefs,
   loadSaves,
   saveApiSettings,
   savePacks,
+  savePlayerPrefs,
   setActiveSaveId,
   upsertSave,
 } from './lib/storage';
 
 interface Store {
   api: ApiSettings;
+  prefs: PlayerPrefs;
   packs: SimulatorPack[];
   saves: SaveGame[];
   activeSave: SaveGame | null;
   setApi: (api: ApiSettings) => void;
+  setPrefs: (prefs: PlayerPrefs) => void;
   addPack: (pack: SimulatorPack) => void;
   removePack: (id: string) => void;
   refresh: () => void;
@@ -37,12 +41,14 @@ const Ctx = createContext<Store | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [api, setApiState] = useState(loadApiSettings);
+  const [prefs, setPrefsState] = useState(loadPlayerPrefs);
   const [packs, setPacks] = useState(loadPacks);
   const [saves, setSaves] = useState(loadSaves);
   const [activeId, setActiveId] = useState<string | null>(getActiveSaveId);
 
   const refresh = useCallback(() => {
     setApiState(loadApiSettings());
+    setPrefsState(loadPlayerPrefs());
     setPacks(loadPacks());
     setSaves(loadSaves());
     setActiveId(getActiveSaveId());
@@ -51,6 +57,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const setApi = useCallback((next: ApiSettings) => {
     saveApiSettings(next);
     setApiState(next);
+  }, []);
+
+  const setPrefs = useCallback((next: PlayerPrefs) => {
+    savePlayerPrefs(next);
+    setPrefsState(next);
   }, []);
 
   const addPack = useCallback((pack: SimulatorPack) => {
@@ -94,10 +105,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       api,
+      prefs,
       packs,
       saves,
       activeSave,
       setApi,
+      setPrefs,
       addPack,
       removePack,
       refresh,
@@ -107,10 +120,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       api,
+      prefs,
       packs,
       saves,
       activeSave,
       setApi,
+      setPrefs,
       addPack,
       removePack,
       refresh,

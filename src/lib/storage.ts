@@ -1,5 +1,16 @@
-import type { ApiSettings, SaveGame, SimulatorPack } from '../types';
-import { DEFAULT_API, STORAGE_KEYS } from '../types';
+import type {
+  ApiSettings,
+  FocusPref,
+  PacePref,
+  PlayerPrefs,
+  SaveGame,
+  SimulatorPack,
+} from '../types';
+import {
+  DEFAULT_API,
+  DEFAULT_PLAYER_PREFS,
+  STORAGE_KEYS,
+} from '../types';
 import { analyzePackRules, inferPackTitle } from './pack';
 
 function readJson<T>(key: string, fallback: T): T {
@@ -22,6 +33,35 @@ export function loadApiSettings(): ApiSettings {
 
 export function saveApiSettings(settings: ApiSettings) {
   writeJson(STORAGE_KEYS.api, settings);
+}
+
+function normalizePrefs(raw: Partial<PlayerPrefs> | null | undefined): PlayerPrefs {
+  const pace = raw?.pace;
+  const validPace: PacePref[] = ['plot', 'balanced', 'texture'];
+  const validFocus: FocusPref[] = [
+    'atmosphere',
+    'psychology',
+    'plotBeat',
+    'dialogue',
+    'sensory',
+    'relationship',
+  ];
+  return {
+    pace: pace && validPace.includes(pace) ? pace : DEFAULT_PLAYER_PREFS.pace,
+    focus: Array.isArray(raw?.focus)
+      ? raw!.focus.filter((f): f is FocusPref =>
+          validFocus.includes(f as FocusPref),
+        )
+      : [],
+  };
+}
+
+export function loadPlayerPrefs(): PlayerPrefs {
+  return normalizePrefs(readJson<Partial<PlayerPrefs>>(STORAGE_KEYS.prefs, {}));
+}
+
+export function savePlayerPrefs(prefs: PlayerPrefs) {
+  writeJson(STORAGE_KEYS.prefs, normalizePrefs(prefs));
 }
 
 export function loadPacks(): SimulatorPack[] {
