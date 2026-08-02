@@ -30,6 +30,7 @@ interface Store {
   setApi: (api: ApiSettings) => void;
   setPrefs: (prefs: PlayerPrefs) => void;
   addPack: (pack: SimulatorPack) => void;
+  updatePack: (pack: SimulatorPack) => void;
   removePack: (id: string) => void;
   refresh: () => void;
   selectSave: (id: string | null) => void;
@@ -67,6 +68,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const addPack = useCallback((pack: SimulatorPack) => {
     setPacks((prev) => {
       const next = [pack, ...prev.filter((p) => p.id !== pack.id)];
+      savePacks(next);
+      return next;
+    });
+  }, []);
+
+  const updatePack = useCallback((pack: SimulatorPack) => {
+    setPacks((prev) => {
+      const next = prev.map((p) => (p.id === pack.id ? pack : p));
       savePacks(next);
       return next;
     });
@@ -112,6 +121,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setApi,
       setPrefs,
       addPack,
+      updatePack,
       removePack,
       refresh,
       selectSave,
@@ -127,6 +137,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setApi,
       setPrefs,
       addPack,
+      updatePack,
       removePack,
       refresh,
       selectSave,

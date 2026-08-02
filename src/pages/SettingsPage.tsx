@@ -159,11 +159,11 @@ export function SettingsPage() {
             </li>
             <li>
               <strong>开新局</strong>
-              ：回大厅点「新建对局」→ 选模拟器。有的要先填人设提纲，有的由 AI 引导开局（欢迎语 /「开始游戏」等），按页面提示即可。
+              ：回大厅点「新建对局」→ 选模拟器。有的要先填人设提纲，有的由 AI 引导开局（欢迎语 /「开始游戏」等），按页面提示即可。首次开局会先把长规则精炼成短规则卡（同模拟器之后复用），对局时不再每轮塞全文。
             </li>
             <li>
               <strong>边读边玩</strong>
-              ：正文像小说一样往下读；读完点底部「选项」，或自己写行动发送。生成新章节时尽量别锁屏、别切走。
+              ：正文像小说一样往下读；读完点底部「选项」，或自己写行动发送。生成新章节时尽量别锁屏、别切走。接戏靠摘要与连贯笔记；约每 5 章会再强调一次规则卡。
             </li>
             <li>
               <strong>翻以前的回合</strong>
@@ -371,21 +371,43 @@ export function SettingsPage() {
         ) : null}
 
         <details className="card collapsible">
-          <summary>高级 · 核心规则</summary>
+          <summary>高级 · 规则原文 / 精简卡</summary>
           {activeSave ? (
-            <pre
-              style={{
-                whiteSpace: 'pre-wrap',
-                fontSize: '0.75rem',
-                maxHeight: '40vh',
-                overflow: 'auto',
-                color: 'var(--text-muted)',
-              }}
-            >
-              {activeSave.packRules}
-            </pre>
+            <>
+              {activeSave.rulesDigest ? (
+                <>
+                  <p className="muted">对局实际使用的规则精简卡：</p>
+                  <pre
+                    style={{
+                      whiteSpace: 'pre-wrap',
+                      fontSize: '0.75rem',
+                      maxHeight: '28vh',
+                      overflow: 'auto',
+                      color: 'var(--text-muted)',
+                      marginBottom: '0.75rem',
+                    }}
+                  >
+                    {activeSave.rulesDigest}
+                  </pre>
+                </>
+              ) : (
+                <p className="muted">尚未精炼规则卡（开局或下一章生成时会自动生成）。</p>
+              )}
+              <p className="muted">模拟器原文（仅备份查看，对局不再每轮发送）：</p>
+              <pre
+                style={{
+                  whiteSpace: 'pre-wrap',
+                  fontSize: '0.75rem',
+                  maxHeight: '40vh',
+                  overflow: 'auto',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                {activeSave.packRules}
+              </pre>
+            </>
           ) : (
-            <p className="muted">打开某个存档后，可在此查看该模拟器原文规则。</p>
+            <p className="muted">打开某个存档后，可在此查看规则精简卡与原文。</p>
           )}
         </details>
 
@@ -493,11 +515,11 @@ export function SettingsPage() {
             tapCount.current += 1;
             if (tapCount.current >= 5) {
               tapCount.current = 0;
-              setMsg('版本 0.2.0 · 本地 PWA');
+              setMsg('版本 0.3.0 · 本地 PWA');
             }
           }}
         >
-          v0.2.0
+          v0.3.0
         </p>
       </div>
     </div>

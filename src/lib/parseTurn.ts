@@ -315,6 +315,154 @@ function parseFreeText(text: string): ParsedTurnPayload {
   };
 }
 
+export const META_MARKER = '<<<META>>>';
+
+/** 将双段协议的正文标记解析为 blocks（流式预览与最终入库共用） */
+export function parseProseBlocks(prose: string): ContentBlock[] {
+  const text = (prose || '').replace(/\r\n/g, '\n');
+  if (!text.trim()) return [];
+
+  const re = /<<<([NDSP])(?::([^>\n]*))?>>>/g;
+  const marks: { index: number; end: number; kind: string; arg: string }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    marks.push({
+      index: m.index,
+      end: m.index + m[0].length,
+      kind: m[1],
+      arg: (m[2] || '').trim(),
+    });
+  }
+
+  if (!marks.length) {
+    return [{ type: 'narrative', text: text.trim() }];
+  }
+
+  const blocks: ContentBlock[] = [];
+  // 标记前的前言当作 narrative
+  if (marks[0].index > 0) {
+    const head = text.slice(0, marks[0].index).trim();
+    if (head) blocks.push({ type: 'narrative', text: head });
+  }
+
+  for (let i = 0; i < marks.length; i++) {
+    const cur = marks[i];
+    const nextStart = i + 1 < marks.length ? marks[i + 1].index : text.length;
+    const body = text.slice(cur.end, nextStart).replace(/^\n/, '').trimEnd();
+    const content = body.trim();
+    if (!content && cur.kind !== 'P') continue;
+
+    if (cur.kind === 'D') {
+      blocks.push({
+        type: 'dialogue',
+        speaker: cur.arg || '角色',
+        text: content,
+      });
+    } else if (cur.kind === 'P') {
+      blocks.push({
+        type: 'plaintext',
+        title: cur.arg || undefined,
+        text: content,
+      });
+    } else if (cur.kind === 'S') {
+      blocks.push({ type: 'system', text: content });
+    } else {
+      blocks.push({ type: 'narrative', text: content });
+    }
+  }
+
+  return blocks.length ? blocks : [{ type: 'narrative', text: text.trim() }];
+}
+
+/**
+ * 双段协议：正文(+块标记) + <<<META>>> + JSON
+ * META 提供 title/options/summary 等；blocks 优先来自正文段。
+ */
+export function parseStreamedTurn(raw: string): ParsedTurnPayload {
+  const cleaned = raw.replace(/^\uFEFF/, '');
+  const idx = cleaned.lastIndexOf(META_MARKER);
+  if (idx < 0) {
+    // 无 META：可能是降级 JSON，或残缺流
+    if (looksLikeJsonBlob(cleaned.trim())) {
+      return parseModelTurn(cleaned);
+    }
+    const blocks = parseProseBlocks(cleaned);
+    if (!blocks.length) {
+      throw new TurnParseError(
+        '流式输出缺少 META，且正文为空。请重试。',
+        raw,
+      );
+    }
+    throw new TurnParseError(
+      '流式输出未包含 <<<META>>>（选项区）。请点「重试上次生成」。',
+      raw,
+    );
+  }
+
+  const prose = cleaned.slice(0, idx).trim();
+  const metaRaw = stripFences(cleaned.slice(idx + META_MARKER.length).trim());
+  const obj = tryParseJsonObject(metaRaw);
+  if (!obj) {
+    const salvaged = salvageBrokenJson(metaRaw);
+    if (salvaged?.options.length) {
+      const blocks = parseProseBlocks(prose);
+      return {
+        ...salvaged,
+        blocks: blocks.length ? blocks : salvaged.blocks,
+      };
+    }
+    throw new TurnParseError(
+      'META JSON 无法解析。请点「重试上次生成」。',
+      raw,
+    );
+  }
+
+  const blocksFromProse = parseProseBlocks(prose);
+  const blocksFromMeta = normalizeBlocks(obj.blocks);
+  const fallbackBlock: ContentBlock = {
+    type: 'system',
+    text: '（本章无正文，请重试）',
+  };
+  const blocks: ContentBlock[] = blocksFromProse.length
+    ? blocksFromProse
+    : blocksFromMeta.length
+      ? blocksFromMeta
+      : [fallbackBlock];
+
+  const options = normalizeOptions(obj.options);
+  if (!options.length) {
+    throw new TurnParseError(
+      'META 中缺少选项。请点「重试上次生成」。',
+      raw,
+    );
+  }
+
+  const delta = obj.continuityDelta ? String(obj.continuityDelta).trim() : '';
+  return {
+    title: String(obj.title || '本回合'),
+    timeLabel: obj.timeLabel ? String(obj.timeLabel) : undefined,
+    phase: obj.phase ? String(obj.phase) : undefined,
+    blocks,
+    options,
+    summary: String(
+      obj.summary ||
+        blocks
+          .map((b) => b.text)
+          .join(' ')
+          .slice(0, 120),
+    ),
+    continuityDelta: delta || undefined,
+  };
+}
+
+/** 自动识别双段协议或旧 JSON */
+export function parseAnyTurn(raw: string): ParsedTurnPayload {
+  if (raw.includes(META_MARKER) || /<<<[NDSP](?::[^>]*)?>>>/.test(raw)) {
+    return parseStreamedTurn(raw);
+  }
+  return parseModelTurn(raw);
+}
+
 export function parseModelTurn(raw: string): ParsedTurnPayload {
   const cleaned = stripFences(raw);
 

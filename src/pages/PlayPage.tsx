@@ -3,8 +3,18 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ActionBar } from '../components/ActionBar';
 import { Stage } from '../components/Stage';
 import { TurnSheet } from '../components/TurnSheet';
-import { generateTurn, regenerateOptions } from '../lib/api';
-import { parseModelTurn, toTurn, mergeContinuityNotes } from '../lib/parseTurn';
+import {
+  ensureRulesDigest,
+  generateTurn,
+  regenerateOptions,
+} from '../lib/api';
+import {
+  parseAnyTurn,
+  parseModelTurn,
+  parseProseBlocks,
+  toTurn,
+  mergeContinuityNotes,
+} from '../lib/parseTurn';
 import { useStore } from '../store';
 import type { SaveGame, Turn, TurnOption } from '../types';
 
@@ -38,12 +48,14 @@ function writeDraft(draft: ActionDraft | null) {
 }
 
 export function PlayPage() {
-  const { activeSave, persistSave, api } = useStore();
+  const { activeSave, persistSave, api, packs, updatePack } = useStore();
   const nav = useNavigate();
   const [viewIndex, setViewIndex] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [loadingLabel, setLoadingLabel] = useState('新章节生成中…');
+  const [loadingLabel, setLoadingLabel] = useState('新章节输出中…');
+  const [streamChars, setStreamChars] = useState(0);
+  const [streamDraft, setStreamDraft] = useState<Turn | null>(null);
   const [error, setError] = useState('');
   const [actionsExpanded, setActionsExpanded] = useState(false);
   const [customDraft, setCustomDraft] = useState('');
@@ -52,12 +64,16 @@ export function PlayPage() {
   const userCollapsedRef = useRef(false);
   const scrolledTurnRef = useRef<string | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const proseRafRef = useRef<number | null>(null);
+  const prosePendingRef = useRef('');
 
   function beginLoading(label: string) {
     setLoadingLabel(label);
     setLoading(true);
     setActionsExpanded(false);
     setError('');
+    setStreamChars(0);
+    setStreamDraft(null);
   }
 
   function scrollStageToTop() {
@@ -159,6 +175,8 @@ export function PlayPage() {
     return turns.find((t) => t.index === idx) ?? turns[turns.length - 1];
   }, [turns, viewIndex, latestIndex]);
 
+  const displayTurn = streamDraft ?? currentTurn;
+
   useEffect(() => {
     if (activeSave?.turns.length) {
       setViewIndex(activeSave.turns[activeSave.turns.length - 1].index);
@@ -208,7 +226,7 @@ export function PlayPage() {
     instruction: string,
     opts?: { keepCustom?: string },
   ): Promise<boolean> {
-    beginLoading('新章节生成中…');
+    beginLoading('新章节输出中…');
     writeDraft({
       saveId: save.id,
       customText: opts?.keepCustom ?? customDraft,
@@ -217,21 +235,86 @@ export function PlayPage() {
     });
     setRetryInstruction(instruction);
     try {
-      const raw = await generateTurn(api, save, instruction);
+      let working = save;
+      if (!working.rulesDigest?.trim()) {
+        beginLoading('准备中…');
+        const pack = packs.find((p) => p.id === working.packId);
+        const { digest } = await ensureRulesDigest(
+          api,
+          working,
+          pack?.rulesDigest,
+        );
+        working = {
+          ...working,
+          rulesDigest: digest,
+          updatedAt: Date.now(),
+        };
+        persistSave(working);
+        if (pack && pack.rulesDigest !== digest) {
+          updatePack({ ...pack, rulesDigest: digest });
+        }
+        beginLoading('新章节输出中…');
+      }
+
       const nextIndex =
-        save.turns.length === 0
+        working.turns.length === 0
           ? 1
-          : save.turns[save.turns.length - 1].index + 1;
-      const parsed = parseModelTurn(raw);
+          : working.turns[working.turns.length - 1].index + 1;
+
+      const applyProse = (prose: string) => {
+        if (!prose) {
+          if (proseRafRef.current != null) {
+            window.cancelAnimationFrame(proseRafRef.current);
+            proseRafRef.current = null;
+          }
+          prosePendingRef.current = '';
+          setStreamDraft(null);
+          setStreamChars(0);
+          setLoadingLabel('新章节输出中…');
+          return;
+        }
+        prosePendingRef.current = prose;
+        if (proseRafRef.current != null) return;
+        proseRafRef.current = window.requestAnimationFrame(() => {
+          proseRafRef.current = null;
+          const p = prosePendingRef.current;
+          if (!p) return;
+          setStreamChars(p.length);
+          const blocks = parseProseBlocks(p);
+          setStreamDraft({
+            id: `stream-${nextIndex}`,
+            index: nextIndex,
+            title: '新章节',
+            phase: undefined,
+            blocks: blocks.length
+              ? blocks
+              : p.trim()
+                ? [{ type: 'narrative', text: p }]
+                : [],
+            options: [],
+            summary: '',
+            createdAt: Date.now(),
+          });
+          setLoadingLabel('新章节输出中…');
+        });
+      };
+
+      scrolledTurnRef.current = `stream-${nextIndex}`;
+      scrollStageToTop();
+
+      const raw = await generateTurn(api, working, instruction, {
+        onProse: applyProse,
+      });
+      const parsed = parseAnyTurn(raw);
       const turn = toTurn(parsed, nextIndex);
       const refreshContinuity =
-        save.turns.length > 0 && save.turns.length % 5 === 0;
+        working.turns.length > 0 && working.turns.length % 5 === 0;
       const next: SaveGame = {
-        ...save,
+        ...working,
         phase: 'playing',
-        turns: [...save.turns, turn],
+        turns: [...working.turns, turn],
         continuityNotes: mergeContinuityNotes(
-          save.continuityNotes,
+          working.continuityNotes,
           parsed.continuityDelta,
           nextIndex,
           refreshContinuity,
@@ -239,12 +322,14 @@ export function PlayPage() {
         updatedAt: Date.now(),
       };
       scrolledTurnRef.current = null;
+      setStreamDraft(null);
       persistSave(next);
       setViewIndex(turn.index);
       setRetryInstruction(null);
       writeDraft(null);
       return true;
     } catch (e) {
+      setStreamDraft(null);
       const msg = e instanceof Error ? e.message : '生成失败';
       setError(msg);
       if (opts?.keepCustom != null) {
@@ -259,7 +344,12 @@ export function PlayPage() {
       });
       return false;
     } finally {
+      if (proseRafRef.current != null) {
+        window.cancelAnimationFrame(proseRafRef.current);
+        proseRafRef.current = null;
+      }
       setLoading(false);
+      setStreamDraft(null);
     }
   }
 
@@ -404,14 +494,18 @@ export function PlayPage() {
         </div>
         <h1>
           {activeSave.name}
-          {currentTurn ? ` · ${currentTurn.index}` : ''}
+          {displayTurn ? ` · ${displayTurn.index}` : ''}
         </h1>
         <Link to="/settings" className="icon-btn" style={{ textDecoration: 'none' }}>
           设定
         </Link>
       </header>
 
-      <Stage key={currentTurn?.id ?? 'empty'} ref={stageRef} turn={currentTurn}>
+      <Stage
+        key={streamDraft ? streamDraft.id : (currentTurn?.id ?? 'empty')}
+        ref={stageRef}
+        turn={displayTurn}
+      >
         {error ? (
           <div className="error-block">
             <p className="error">{error}</p>
@@ -468,7 +562,7 @@ export function PlayPage() {
 
       {atLatest ? (
         <ActionBar
-          options={currentTurn?.options ?? []}
+          options={streamDraft ? [] : (currentTurn?.options ?? [])}
           disabled={!canAct || loading}
           onChoose={onChoose}
           onCustom={onCustom}
@@ -492,14 +586,18 @@ export function PlayPage() {
         </div>
       )}
 
-      {loading ? (
+      {loading && streamDraft && streamChars > 0 ? (
+        <div className="gen-stream-bar" role="status" aria-live="polite">
+          <span className="gen-overlay-pulse" aria-hidden />
+          <span>新章节输出中…</span>
+        </div>
+      ) : null}
+
+      {loading && !(streamDraft && streamChars > 0) ? (
         <div className="gen-overlay" role="status" aria-live="polite">
           <div className="gen-overlay-card">
             <span className="gen-overlay-pulse" aria-hidden />
             <p>{loadingLabel}</p>
-            <p className="muted" style={{ fontSize: '0.78rem', margin: 0 }}>
-              生成较长，请尽量保持本页在前台
-            </p>
           </div>
         </div>
       ) : null}

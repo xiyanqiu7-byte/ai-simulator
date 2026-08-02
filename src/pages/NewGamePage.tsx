@@ -1,7 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { generateOpening, generatePrologue } from '../lib/api';
-import { parseModelTurn, toTurn, mergeContinuityNotes } from '../lib/parseTurn';
+import {
+  ensureRulesDigest,
+  formatChatTiming,
+  generateOpening,
+  generatePrologue,
+  getLastChatTiming,
+} from '../lib/api';
+import { parseAnyTurn, toTurn, mergeContinuityNotes } from '../lib/parseTurn';
 import { useStore } from '../store';
 import type { SaveGame, SetupMode } from '../types';
 
@@ -24,6 +30,7 @@ export function NewGamePage() {
       packId: pack.id,
       packTitle: pack.title,
       packRules: pack.rawRules,
+      rulesDigest: pack.rulesDigest,
       fillTemplate: pack.fillTemplate || '',
       setupMode: pack.setupMode || 'form',
       characterNotes: '',
@@ -97,11 +104,12 @@ export function NewGamePage() {
 }
 
 export function SetupPage() {
-  const { activeSave, persistSave, api } = useStore();
+  const { activeSave, persistSave, api, packs, updatePack } = useStore();
   const nav = useNavigate();
   const [notes, setNotes] = useState(activeSave?.characterNotes ?? '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingLabel, setLoadingLabel] = useState('');
   const [copied, setCopied] = useState(false);
 
   if (!activeSave) {
@@ -144,7 +152,8 @@ export function SetupPage() {
       return;
     }
 
-    const draft: SaveGame = {
+    const pack = packs.find((p) => p.id === activeSave.packId);
+    let draft: SaveGame = {
       ...activeSave,
       setupMode: useGuided ? 'guided' : 'form',
       characterNotes: text,
@@ -153,10 +162,23 @@ export function SetupPage() {
     persistSave(draft);
     setLoading(true);
     try {
+      setLoadingLabel('准备中…');
+      const { digest } = await ensureRulesDigest(
+        api,
+        draft,
+        pack?.rulesDigest,
+      );
+      draft = { ...draft, rulesDigest: digest, updatedAt: Date.now() };
+      persistSave(draft);
+      if (pack && pack.rulesDigest !== digest) {
+        updatePack({ ...pack, rulesDigest: digest });
+      }
+
+      setLoadingLabel(useGuided ? '开局中…' : '生成前置剧情…');
       const raw = useGuided
         ? await generateOpening(api, draft)
         : await generatePrologue(api, draft);
-      const parsed = parseModelTurn(raw);
+      const parsed = parseAnyTurn(raw);
       const turn = toTurn(parsed, 0);
       persistSave({
         ...draft,
@@ -171,11 +193,20 @@ export function SetupPage() {
         ),
         updatedAt: Date.now(),
       });
+      const timing = getLastChatTiming();
+      if (timing) {
+        console.info('[simreader] 开局完成', formatChatTiming(timing));
+      }
       nav('/play');
     } catch (e) {
+      const timing = getLastChatTiming();
+      if (timing) {
+        console.info('[simreader] 开局失败前最后一次', formatChatTiming(timing));
+      }
       setError(e instanceof Error ? e.message : '生成失败');
     } finally {
       setLoading(false);
+      setLoadingLabel('');
     }
   }
 
@@ -231,7 +262,7 @@ export function SetupPage() {
               disabled={loading}
               onClick={() => void startGame(true)}
             >
-              {loading ? '开局中…' : '开始游戏'}
+              {loading ? loadingLabel || '开局中…' : '开始游戏'}
             </button>
           </>
         ) : (
@@ -271,7 +302,7 @@ export function SetupPage() {
               disabled={loading}
               onClick={() => void startGame(false)}
             >
-              {loading ? '生成前置剧情…' : '生成前置剧情'}
+              {loading ? loadingLabel || '生成前置剧情…' : '生成前置剧情'}
             </button>
             <button
               type="button"

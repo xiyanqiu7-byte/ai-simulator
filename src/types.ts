@@ -47,6 +47,11 @@ export interface SimulatorPack {
   id: string;
   title: string;
   rawRules: string;
+  /**
+   * 开局时由 AI 精炼的规则卡（约 800～1500 字）。缓存后各存档共用。
+   * 对局请求只带此卡，不再每轮塞原文。
+   */
+  rulesDigest?: string;
   /** One copyable block of blank titles for the player to fill in a single textarea */
   fillTemplate: string;
   setupMode: SetupMode;
@@ -61,6 +66,8 @@ export interface SaveGame {
   packId: string;
   packTitle: string;
   packRules: string;
+  /** 本存档使用的规则精简卡（开局时从 pack 缓存或现场精炼） */
+  rulesDigest?: string;
   fillTemplate: string;
   setupMode: SetupMode;
   characterNotes: string;
