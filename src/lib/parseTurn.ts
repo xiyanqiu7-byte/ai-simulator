@@ -277,23 +277,67 @@ function payloadFromObject(json: Record<string, unknown>): ParsedTurnPayload | n
   };
 }
 
-/** Fallback: 真正的纯文本回复（非 JSON） */
-function parseFreeText(text: string): ParsedTurnPayload {
+/** 从正文里捞 A/B/C/D（即使后面还有羁绊状态等） */
+export function extractInlineOptions(text: string): TurnOption[] {
+  const src = (text || '').replace(/\r\n/g, '\n');
   const options: TurnOption[] = [];
-  const optionRe =
-    /(?:^|\n)\s*(?:选项\s*)?([A-Da-d])[\.．、:：\)）]\s*(.+?)(?=\n\s*(?:选项\s*)?[A-Da-d][\.．、:：\)）]|\n*$)/gs;
+  const seen = new Set<string>();
+
+  // 行首：A. / A、 / A： / **A.** / 选项A：
+  const lineRe =
+    /^(?:#{1,6}\s*)?(?:\*\*|__)?(?:选项\s*)?([A-Da-d])(?:\*\*|__)?\s*[\.．、:：\)）]\s*(.+?)\s*$/gm;
   let m: RegExpExecArray | null;
-  const copy = text;
-  while ((m = optionRe.exec(copy))) {
-    options.push({ key: m[1].toUpperCase(), text: m[2].trim() });
+  while ((m = lineRe.exec(src))) {
+    const key = m[1].toUpperCase();
+    let body = m[2].trim();
+    // 去掉行尾加粗残留
+    body = body.replace(/\*\*\s*$/, '').replace(/__\s*$/, '').trim();
+    if (!body || seen.has(key)) continue;
+    // 跳过太像标题/状态的行
+    if (/^【/.test(body) && body.length < 8) continue;
+    seen.add(key);
+    options.push({ key, text: body });
   }
 
+  if (options.length >= 2) return options;
+
+  // 宽松：同一段里的 A. xxx B. xxx
+  const looseRe =
+    /(?:^|[\n\r])\s*(?:选项\s*)?([A-Da-d])[\.．、:：\)）]\s*([^\n]+)/g;
+  seen.clear();
+  options.length = 0;
+  while ((m = looseRe.exec(src))) {
+    const key = m[1].toUpperCase();
+    const body = m[2].trim();
+    if (!body || seen.has(key)) continue;
+    seen.add(key);
+    options.push({ key, text: body });
+  }
+  return options;
+}
+
+/** 去掉正文中的选项清单行，保留其后的羁绊状态等 */
+function stripInlineOptionLines(text: string): string {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const filtered = lines.filter(
+    (line) =>
+      !/^\s*(?:#{1,6}\s*)?(?:\*\*|__)?(?:选项\s*)?[A-Da-d](?:\*\*|__)?\s*[\.．、:：\)）]/.test(
+        line,
+      ),
+  );
+  // 压缩选项块留下的多余空行
+  return filtered
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** Fallback: 真正的纯文本回复（非 JSON） */
+function parseFreeText(text: string): ParsedTurnPayload {
+  const options = extractInlineOptions(text);
   let body = text;
   if (options.length) {
-    body = text.replace(
-      /(?:^|\n)\s*(?:选项\s*)?[A-Da-d][\.．、:：\)）][\s\S]*$/,
-      '',
-    );
+    body = stripInlineOptionLines(text);
   }
 
   const blocks: ContentBlock[] = [];
@@ -309,7 +353,7 @@ function parseFreeText(text: string): ParsedTurnPayload {
 
   return {
     title: '本回合',
-    blocks: blocks.length ? blocks : [{ type: 'narrative', text: body.trim() }],
+    blocks: blocks.length ? blocks : [{ type: 'narrative', text: body.trim() || text.trim() }],
     options,
     summary: body.replace(/\s+/g, ' ').slice(0, 120),
   };
@@ -377,24 +421,22 @@ export function parseProseBlocks(prose: string): ContentBlock[] {
 /**
  * 双段协议：正文(+块标记) + <<<META>>> + JSON
  * META 提供 title/options/summary 等；blocks 优先来自正文段。
+ * 若 META 缺失或 options 为空，从正文 A/B/C/D 回填。
  */
 export function parseStreamedTurn(raw: string): ParsedTurnPayload {
   const cleaned = raw.replace(/^\uFEFF/, '');
   const idx = cleaned.lastIndexOf(META_MARKER);
+
   if (idx < 0) {
-    // 无 META：可能是降级 JSON，或残缺流
     if (looksLikeJsonBlob(cleaned.trim())) {
-      return parseModelTurn(cleaned);
+      return ensureOptions(parseModelTurn(cleaned), cleaned);
     }
-    const blocks = parseProseBlocks(cleaned);
-    if (!blocks.length) {
-      throw new TurnParseError(
-        '流式输出缺少 META，且正文为空。请重试。',
-        raw,
-      );
+    const free = parseFreeText(cleaned);
+    if (free.options.length || free.blocks.some((b) => b.text.trim())) {
+      return free;
     }
     throw new TurnParseError(
-      '流式输出未包含 <<<META>>>（选项区）。请点「重试上次生成」。',
+      '无法解析本章正文与选项。请点「重试上次生成」。',
       raw,
     );
   }
@@ -402,23 +444,52 @@ export function parseStreamedTurn(raw: string): ParsedTurnPayload {
   const prose = cleaned.slice(0, idx).trim();
   const metaRaw = stripFences(cleaned.slice(idx + META_MARKER.length).trim());
   const obj = tryParseJsonObject(metaRaw);
-  if (!obj) {
+
+  let title = '本回合';
+  let timeLabel: string | undefined;
+  let phase: string | undefined;
+  let summary = '';
+  let continuityDelta: string | undefined;
+  let options: TurnOption[] = [];
+  let blocksFromMeta: ContentBlock[] = [];
+
+  if (obj) {
+    title = String(obj.title || '本回合');
+    timeLabel = obj.timeLabel ? String(obj.timeLabel) : undefined;
+    phase = obj.phase ? String(obj.phase) : undefined;
+    summary = String(obj.summary || '');
+    continuityDelta = obj.continuityDelta
+      ? String(obj.continuityDelta).trim() || undefined
+      : undefined;
+    options = normalizeOptions(obj.options);
+    blocksFromMeta = normalizeBlocks(obj.blocks);
+  } else {
     const salvaged = salvageBrokenJson(metaRaw);
-    if (salvaged?.options.length) {
-      const blocks = parseProseBlocks(prose);
-      return {
-        ...salvaged,
-        blocks: blocks.length ? blocks : salvaged.blocks,
-      };
+    if (salvaged) {
+      title = salvaged.title;
+      timeLabel = salvaged.timeLabel;
+      phase = salvaged.phase;
+      summary = salvaged.summary;
+      continuityDelta = salvaged.continuityDelta;
+      options = salvaged.options;
+      blocksFromMeta = salvaged.blocks;
     }
-    throw new TurnParseError(
-      'META JSON 无法解析。请点「重试上次生成」。',
-      raw,
-    );
   }
 
-  const blocksFromProse = parseProseBlocks(prose);
-  const blocksFromMeta = normalizeBlocks(obj.blocks);
+  // META 没给出选项时，从正文捞
+  if (!options.length) {
+    options = extractInlineOptions(prose);
+  }
+  if (!options.length) {
+    options = extractInlineOptions(cleaned);
+  }
+
+  let proseForBlocks = prose;
+  if (options.length && extractInlineOptions(prose).length) {
+    proseForBlocks = stripInlineOptionLines(prose);
+  }
+
+  const blocksFromProse = parseProseBlocks(proseForBlocks);
   const fallbackBlock: ContentBlock = {
     type: 'system',
     text: '（本章无正文，请重试）',
@@ -429,30 +500,39 @@ export function parseStreamedTurn(raw: string): ParsedTurnPayload {
       ? blocksFromMeta
       : [fallbackBlock];
 
-  const options = normalizeOptions(obj.options);
   if (!options.length) {
     throw new TurnParseError(
-      'META 中缺少选项。请点「重试上次生成」。',
+      '未找到选项（META 与正文均无 A/B/C）。请点「重试上次生成」。',
       raw,
     );
   }
 
-  const delta = obj.continuityDelta ? String(obj.continuityDelta).trim() : '';
   return {
-    title: String(obj.title || '本回合'),
-    timeLabel: obj.timeLabel ? String(obj.timeLabel) : undefined,
-    phase: obj.phase ? String(obj.phase) : undefined,
+    title,
+    timeLabel,
+    phase,
     blocks,
     options,
-    summary: String(
-      obj.summary ||
-        blocks
-          .map((b) => b.text)
-          .join(' ')
-          .slice(0, 120),
-    ),
-    continuityDelta: delta || undefined,
+    summary:
+      summary ||
+      blocks
+        .map((b) => b.text)
+        .join(' ')
+        .slice(0, 120),
+    continuityDelta,
   };
+}
+
+function ensureOptions(
+  payload: ParsedTurnPayload,
+  rawFallback: string,
+): ParsedTurnPayload {
+  if (payload.options.length) return payload;
+  const fromText = extractInlineOptions(
+    payload.blocks.map((b) => b.text).join('\n') + '\n' + rawFallback,
+  );
+  if (!fromText.length) return payload;
+  return { ...payload, options: fromText };
 }
 
 /** 自动识别双段协议或旧 JSON */
@@ -460,7 +540,7 @@ export function parseAnyTurn(raw: string): ParsedTurnPayload {
   if (raw.includes(META_MARKER) || /<<<[NDSP](?::[^>]*)?>>>/.test(raw)) {
     return parseStreamedTurn(raw);
   }
-  return parseModelTurn(raw);
+  return ensureOptions(parseModelTurn(raw), raw);
 }
 
 export function parseModelTurn(raw: string): ParsedTurnPayload {

@@ -46,6 +46,17 @@ function normalizePrefs(raw: Partial<PlayerPrefs> | null | undefined): PlayerPre
     'sensory',
     'relationship',
   ];
+  const theme = raw?.theme === 'day' || raw?.theme === 'night' ? raw.theme : undefined;
+  // 兼容旧键 simreader.theme
+  let resolvedTheme = theme;
+  if (!resolvedTheme) {
+    try {
+      const legacy = localStorage.getItem(STORAGE_KEYS.theme);
+      if (legacy === 'day' || legacy === 'night') resolvedTheme = legacy;
+    } catch {
+      /* ignore */
+    }
+  }
   return {
     pace: pace && validPace.includes(pace) ? pace : DEFAULT_PLAYER_PREFS.pace,
     focus: Array.isArray(raw?.focus)
@@ -53,15 +64,35 @@ function normalizePrefs(raw: Partial<PlayerPrefs> | null | undefined): PlayerPre
           validFocus.includes(f as FocusPref),
         )
       : [],
+    theme: resolvedTheme ?? DEFAULT_PLAYER_PREFS.theme ?? 'night',
   };
 }
 
+export function applyUiTheme(theme: 'day' | 'night') {
+  const root = document.documentElement;
+  root.setAttribute('data-theme', theme);
+  root.style.colorScheme = theme === 'day' ? 'light' : 'dark';
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) {
+    meta.setAttribute('content', theme === 'day' ? '#f4f6fb' : '#07070a');
+  }
+}
+
 export function loadPlayerPrefs(): PlayerPrefs {
-  return normalizePrefs(readJson<Partial<PlayerPrefs>>(STORAGE_KEYS.prefs, {}));
+  const prefs = normalizePrefs(readJson<Partial<PlayerPrefs>>(STORAGE_KEYS.prefs, {}));
+  applyUiTheme(prefs.theme || 'night');
+  return prefs;
 }
 
 export function savePlayerPrefs(prefs: PlayerPrefs) {
-  writeJson(STORAGE_KEYS.prefs, normalizePrefs(prefs));
+  const next = normalizePrefs(prefs);
+  writeJson(STORAGE_KEYS.prefs, next);
+  try {
+    localStorage.setItem(STORAGE_KEYS.theme, next.theme || 'night');
+  } catch {
+    /* ignore */
+  }
+  applyUiTheme(next.theme || 'night');
 }
 
 export function loadPacks(): SimulatorPack[] {

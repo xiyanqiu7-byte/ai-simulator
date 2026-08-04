@@ -9,14 +9,31 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#0c0c0f" />
+    <meta name="theme-color" content="#07070a" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('simreader.theme');
+          if (!t) {
+            var prefs = localStorage.getItem('simreader.prefs');
+            if (prefs) t = JSON.parse(prefs).theme;
+          }
+          document.documentElement.setAttribute(
+            'data-theme',
+            t === 'day' ? 'day' : 'night',
+          );
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'night');
+        }
+      })();
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>模拟器阅读器</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600&family=Noto+Sans+SC:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
   </head>

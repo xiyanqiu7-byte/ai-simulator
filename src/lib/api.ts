@@ -62,16 +62,20 @@ export function enableStream() {
   }
 }
 
-const IMMERSION_RULES = `
-【阅读器·沉浸主控】
-- 默认沉浸式主控：以玩家可感知、可行动的视角推进，强化「我在场」的反馈。
-- 少旁观腔、少上帝视角代操玩家；选项应是玩家能立刻采取的行动或对话。
+const PRIORITY_RULES = `
+【优先级】模拟器规则中的核心玩法与「每回合展示格式」> 阅读器输出壳 > 其它提示。
+若阅读器示例与原文冲突，以原文为准。
+篇幅与版式跟模拟器规则；规则未规定篇幅时，自然书写即可，勿为凑字灌水。
 `.trim();
 
-const DIGEST_MAX = 1600;
-const DIGEST_TARGET = '800～1500';
+const DIGEST_MAX = 1800;
+const DIGEST_TARGET = '900～1600';
 
-function buildPrefsBlock(prefs: PlayerPrefs): string {
+function buildPrefsBlock(prefs: PlayerPrefs): string | null {
+  const hasCustomPace = prefs.pace !== 'balanced';
+  const hasFocus = prefs.focus.length > 0;
+  if (!hasCustomPace && !hasFocus) return null;
+
   const pace =
     PACE_OPTIONS.find((p) => p.id === prefs.pace) ?? PACE_OPTIONS[1];
   const focusLabels = prefs.focus
@@ -79,76 +83,63 @@ function buildPrefsBlock(prefs: PlayerPrefs): string {
     .filter(Boolean) as string[];
 
   const focusLine = focusLabels.length
-    ? `描写侧重（笔墨倾斜，可叠加）：${focusLabels.join('、')}。未点名的侧面可弱写，但不要完全空洞。`
-    : '描写侧重：未勾选，跟规则与剧情需要均衡分配笔墨。';
+    ? `描写侧重（笔墨倾斜）：${focusLabels.join('、')}。`
+    : '';
 
   return `
-【玩家阅读偏好·软约束】
-优先级：模拟器规则禁止项 > 下列偏好 > 默认文风。
+【玩家阅读偏好·最低优先级】
+低于模拟器原文的玩法与每回合展示格式；冲突时忽略本段。
 推进偏好：${pace.label}——${pace.hint}
 ${focusLine}
-以上为侧重点提示，不能用来灌水复读；仍须遵守字数、反重复与规则硬性要求。
 `.trim();
 }
 
-/** 降级路径：整章 JSON（与旧版一致） */
+/** 降级路径：整章 JSON（薄壳） */
 const OUTPUT_SCHEMA_JSON = `
 你必须只输出一个 JSON 对象（不要 Markdown 说明，不要代码围栏外的闲聊），结构如下：
 {
   "title": "本回合短标题",
-  "timeLabel": "例如 2025年3月12日 周三 22:40",
-  "phase": "前置剧情|自由行动|随机事件|手机|重大决策",
   "blocks": [
-    { "type": "narrative", "text": "小说式叙事段落" },
+    { "type": "narrative", "text": "正文，可用 Markdown（标题/分割线/引用/加粗等）；按模拟器规则写展示与叙事" },
     { "type": "dialogue", "speaker": "角色名", "text": "口语对话" },
-    { "type": "system", "text": "系统提示/状态栏文字" },
-    { "type": "plaintext", "title": "手机主页", "text": "严格按模拟器要求的伪界面纯文本，可含换行" }
+    { "type": "plaintext", "title": "手机主页", "text": "伪界面纯文本，可含换行" }
   ],
   "options": [
-    { "key": "A", "text": "选项内容（仅行动/对话，不剧透数值）" },
+    { "key": "A", "text": "选项（须符合规则；自由行动阶段按规则提供【手机】等入口）" },
     { "key": "B", "text": "..." },
     { "key": "C", "text": "..." },
     { "key": "D", "text": "..." }
   ],
-  "summary": "本回「新发生」的事件清单，用分号分隔 3～6 个短句；只写增量，勿复述旧情节",
-  "continuityDelta": "本回对人设/关系/地点/未竟冲突的更新，2～6 条短句；无更新可写空字符串"
+  "summary": "本回新事件 3～6 短句；须点名仍关键的道具/物品/场景陈设",
+  "continuityDelta": "关系/地点/未竟冲突/随身或在场道具与场景物件的更新，可空字符串"
 }
 
 规则：
-- 只输出一个 JSON 对象，不要 Markdown 说明，不要代码围栏外的闲聊。
-- JSON 字符串内的引号必须转义为 \\"，换行用 \\n；禁止输出尾逗号。
-- blocks 按阅读顺序排列，可多段；手机界面必须用 type=plaintext。
-- 必须提供至少 3 个 options（A/B/C，建议含 D）。
-- 严格遵守「规则精简卡」中的语言、视角、禁止项与格式要求。
-- 不要显示隐藏数值；不要上帝视角心理活动（除非精简卡允许）。
-- 【章节长度·硬性】凡「正式剧情回合」：blocks 内全部可读正文合计必须达到 2000～3000 汉字。少于 2000 字视为不合格。
-- 【长度豁免】仅开局仪式短步骤可短写；正式叙事恢复 2k～3k。
-- 【反重复·硬性】禁止复读上一回合对话与空转套话；至少一半篇幅为新信息。
-- 【连贯】参考连贯笔记与摘要；continuityDelta 只记本回变化。
+- 只输出一个 JSON；字符串内引号转义为 \\"，换行用 \\n。
+- 玩法与展示格式以模拟器规则为准；正文可用 Markdown。
+- options 至少 3 个；勿剧透隐藏数值。
+- 必须承接历史中已确立的道具、场景与冲突，禁止无故改写或消失。
 `.trim();
 
-/** 主路径：正文流式 + 章末 META JSON */
+/** 主路径：自由正文流式 + 章末 META */
 const OUTPUT_SCHEMA_STREAM = `
 你必须按「双段协议」输出（便于边生成边阅读），不要输出整章纯 JSON。
 
-【第一段·正文】立刻开始写可读正文，使用块标记：
-<<<N>>>叙事段落
-<<<D:角色名>>>对话内容
-<<<P:手机主页>>>
-伪界面纯文本（可多行）
-<<<S>>>系统提示（少用）
-可重复多个块。正式剧情正文合计 2000～3000 汉字；开局仪式短步骤可短写。
-禁止在第一段输出大段 JSON；禁止复读旧桥段与空转霸总套话。
+【第一段·正文】立刻开始写可读正文。
+- 鼓励 Markdown 排版（与常见对话框一致）：可用 ## 小标题、--- 分割线、> 引用、**加粗**、列表等；灵活即可，不必每段都套模板。
+- 若规则要求每回合展示日期/天气/地点/推送：写在正文靠前位置（可用加粗或短行），再接叙事。
+- 块标记可选：手机伪界面建议 <<<P:标题>>>；对话可用 <<<D:角色名>>>；一般叙事不必打 <<<N>>>。
+- 禁止在第一段输出大段 JSON。
+- 【记忆】必须承接「连贯笔记」与摘要里已出现的道具、场景陈设、人物位置；禁止下一章无故换背景或弄丢道具。
 
-【第二段·META】正文结束后另起一行，输出且仅输出一次标记与 JSON：
+【第二段·META】正文结束后另起一行，输出且仅输出一次：
 <<<META>>>
-{"title":"短标题","timeLabel":"时间","phase":"阶段","options":[{"key":"A","text":"..."},{"key":"B","text":"..."},{"key":"C","text":"..."},{"key":"D","text":"..."}],"summary":"本回新事件，分号分隔3～6句","continuityDelta":"本回设定更新，可空字符串"}
+{"title":"短标题","options":[{"key":"A","text":"..."},{"key":"B","text":"..."},{"key":"C","text":"..."},{"key":"D","text":"..."}],"summary":"本回新事件；点名关键道具/场景","continuityDelta":"关系/地点/冲突/道具与场景物件更新"}
 
 META 规则：
-- <<<META>>> 之后只有一个 JSON 对象，不要代码围栏，不要多余闲聊。
-- options 至少 3 个（建议 A-D）；勿剧透隐藏数值。
-- 不要在 META 里重复整章正文（无需 blocks 字段）。
-- 严格遵守规则精简卡的视角、禁止项与格式。
+- <<<META>>> 之后只有一个 JSON。
+- options 至少 3 个；须符合模拟器规则。
+- summary / continuityDelta 要记下道具与场景，供下回合防失忆。
 `.trim();
 
 /** 无 API 或精炼失败时的本地兜底精简卡 */
@@ -158,11 +149,11 @@ export function localRulesDigest(raw: string, max = DIGEST_MAX): string {
 
   const lines = text.split(/\r?\n/);
   const priority = lines.filter((l) =>
-    /禁止|不可|不得|必须|视角|人称|格式|手机|选项|硬性|玩法|阶段|开局|数值|隐藏/.test(
+    /禁止|不可|不得|必须|视角|人称|格式|手机|选项|硬性|玩法|阶段|开局|数值|隐藏|展示|日期|天气|行动点|推送|星期|WhatsApp|Instagram|Telegram/.test(
       l,
     ),
   );
-  const head = text.slice(0, 700);
+  const head = text.slice(0, 900);
   const body = [head, ...priority].join('\n').slice(0, max);
   return `【规则精简卡·本地兜底】\n${body}${text.length > max ? '\n…（已截断）' : ''}`;
 }
@@ -190,14 +181,20 @@ export async function distillRules(
 
   const system = `你是模拟器规则压缩器。把冗长玩法原文压成「规则精简卡」，供后续每回合生成剧情使用。
 只输出精简卡正文，不要 JSON，不要代码围栏，不要前言后语。
-目标长度约 ${DIGEST_TARGET} 汉字（上限 ${DIGEST_MAX} 字左右）。
-必须保留：人称/视角、禁止项、输出/手机界面格式、开局流程要点、核心玩法阶段、胜负或数值是否隐藏、关键角色关系硬设定。
-删掉：重复示例、长段示范文、无关闲聊、可推断的修辞堆砌。
-若原文有互相冲突的条目，优先保留「禁止 / 必须 / 硬性」。`;
+目标长度约 ${DIGEST_TARGET} 汉字（上限约 ${DIGEST_MAX} 字）。
+
+【必须原样保留要点——删示例文可以，删这些不行】
+1. 时间单位与行动点（如「周」、每周几点行动等）
+2. 每回合必显内容：日期格式、天气/时段、手机推送摘要，以及原文给出的展示版式/顺序
+3. 【手机】入口、手机主页与各 App 流程
+4. 玩家可选行动类型（主动行动 / 用手机 / 等待等）
+5. 人称/视角、禁止项、隐藏数值、开局流程、胜负相关硬设定
+
+删掉：重复示范长文、无关闲聊、可推断的修辞堆砌。
+冲突时优先保留「每回合展示格式」「禁止 / 必须」。`;
 
   const user = `请压缩下列模拟器原文：\n\n${source.slice(0, 28000)}`;
 
-  // 精炼用略低温度，更稳
   const distillSettings: ApiSettings = {
     ...settings,
     temperature: Math.min(settings.temperature, 0.35),
@@ -249,6 +246,14 @@ export async function ensureRulesDigest(
   }
 }
 
+/** 强制重新精炼（忽略缓存），失败则抛错 */
+export async function redistillRulesDigest(
+  settings: ApiSettings,
+  rawRules: string,
+): Promise<string> {
+  return distillRules(settings, rawRules);
+}
+
 function effectiveRulesCard(save: SaveGame): string {
   const card = save.rulesDigest?.trim();
   if (card) return card;
@@ -260,42 +265,72 @@ function buildSystemPrompt(
   format: 'stream' | 'json' = 'stream',
 ): string {
   const prefs = loadPlayerPrefs();
+  const prefsBlock = buildPrefsBlock(prefs);
   return [
+    PRIORITY_RULES,
     effectiveRulesCard(save),
-    IMMERSION_RULES,
-    buildPrefsBlock(prefs),
+    prefsBlock,
     format === 'stream' ? OUTPUT_SCHEMA_STREAM : OUTPUT_SCHEMA_JSON,
-  ].join('\n\n');
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
-/** 仅摘要 + 连贯笔记，不再附上一章全文 */
+/** 更早摘要 + 连贯笔记 + 上一章全文（补上「同对话框」缺的连续上下文） */
+function formatTurnBody(t: SaveGame['turns'][number]): string {
+  return t.blocks
+    .map((b) => {
+      if (b.type === 'dialogue') return `${b.speaker}：${b.text}`;
+      if (b.type === 'plaintext') {
+        return b.title ? `【${b.title}】\n${b.text}` : b.text;
+      }
+      return b.text;
+    })
+    .join('\n\n');
+}
+
 function buildHistory(save: SaveGame): string {
   const turns = save.turns;
   const continuity = save.continuityNotes?.trim()
-    ? `【连贯笔记·关系与设定演化】\n${save.continuityNotes.trim()}\n\n`
+    ? `【连贯笔记·关系/场景/道具】\n${save.continuityNotes.trim()}\n\n`
     : '';
 
   if (!turns.length) {
-    return `${continuity}【已发生事件摘要·禁止重演】\n（尚无回合）`;
+    return `${continuity}【已发生事件摘要】\n（尚无回合）`;
   }
 
-  const summaries = turns
-    .map((t) => {
-      const choice = t.playerChoice
-        ? ` → 玩家：${t.playerChoice.label}`
-        : '';
-      return `第${t.index}回《${t.title}》：${t.summary || '（无摘要）'}${choice}`;
-    })
-    .join('\n');
+  const older = turns.slice(0, -1);
+  const last = turns[turns.length - 1];
+  const olderText = older.length
+    ? older
+        .map((t) => {
+          const choice = t.playerChoice
+            ? ` → 玩家：${t.playerChoice.label}`
+            : '';
+          return `第${t.index}回《${t.title}》：${t.summary || '（无摘要）'}${choice}`;
+        })
+        .join('\n')
+    : '（无更早摘要）';
 
-  return `${continuity}【已发生事件摘要·禁止重演】\n${summaries}`;
+  const lastChoice = last.playerChoice
+    ? `\n玩家选择：${last.playerChoice.label}`
+    : '';
+  let lastBody = formatTurnBody(last);
+  const LAST_BODY_MAX = 8000;
+  if (lastBody.length > LAST_BODY_MAX) {
+    lastBody =
+      lastBody.slice(0, LAST_BODY_MAX) +
+      '\n…（上一章过长已截断尾部，请仍承接前文道具与场景）';
+  }
+
+  return `${continuity}【更早事件摘要】\n${olderText}\n\n【上一章全文·须承接道具/场景/对话，禁止无故改背景】\n【第${last.index}回 · ${last.title}】\n${lastBody}${lastChoice}`;
 }
 
 function rulesReinforceBlock(save: SaveGame, nextIndex: number): string {
-  // 第 5、10、15… 回加强重申精简卡
+  // 第 5、10、15… 回防跑偏：重申精简卡
   if (nextIndex < 5 || nextIndex % 5 !== 0) return '';
   const card = effectiveRulesCard(save);
-  return `\n\n【规则重申·第${nextIndex}回】请再次严格遵守下列规则精简卡（禁止项与格式优先）：\n${card}\n`;
+  return `\n\n【防跑偏·第${nextIndex}回】若已偏离规则中的每回合展示格式、手机入口或核心玩法，请拉回。下列精简卡供对照：\n${card}\n`;
 }
 
 const JSON_MODE_KEY = 'simreader.jsonMode';
@@ -603,8 +638,8 @@ export async function generatePrologue(
   save: SaveGame,
   handlers?: StreamHandlers,
 ): Promise<string> {
-  const user = `玩家已填写初始设定如下：\n${save.characterNotes}\n\n请生成「前置剧情 / 第一回合开场」（相遇或关系建立），phase 设为「前置剧情」。待玩家确认后才会进入正式回合。选项可以是确认进入游戏、微调设定相关的轻量选择。\n本回合为正式叙事：正文合计须 2000～3000 字。请严格按双段协议输出（正文块标记 + <<<META>>>）。`;
-  const userJson = `玩家已填写初始设定如下：\n${save.characterNotes}\n\n请生成「前置剧情 / 第一回合开场」（相遇或关系建立），phase 设为「前置剧情」。待玩家确认后才会进入正式回合。选项可以是确认进入游戏、微调设定相关的轻量选择。\n本回合为正式叙事：blocks 正文合计须 2000～3000 字。`;
+  const user = `玩家已填写初始设定如下：\n${save.characterNotes}\n\n请按模拟器规则生成「前置剧情 / 第一回合开场」（相遇或关系建立）。待玩家确认后才会进入正式回合。选项可以是确认进入游戏、微调设定相关的轻量选择。\n请按双段协议输出（正文可自由散文 + <<<META>>>）。`;
+  const userJson = `玩家已填写初始设定如下：\n${save.characterNotes}\n\n请按模拟器规则生成「前置剧情 / 第一回合开场」（相遇或关系建立）。待玩家确认后才会进入正式回合。选项可以是确认进入游戏、微调设定相关的轻量选择。\n请只输出一个 JSON 对象。`;
   return chatPreferStream(
     settings,
     [
@@ -628,16 +663,12 @@ export async function generateOpening(
   const notes = save.characterNotes?.trim()
     ? `玩家可选备注：\n${save.characterNotes}\n\n`
     : '';
-  const user = `${notes}本模拟器由 AI 引导开局。请严格按规则精简卡中的开局顺序执行第一步（如欢迎语、语言选择、提示输入「开始游戏」、设定面板等）。
-phase 设为「开局引导」。
+  const user = `${notes}本模拟器由 AI 引导开局。请严格按模拟器规则中的开局顺序执行第一步（如欢迎语、语言选择、提示输入「开始游戏」、设定面板等）。
 玩家尚未填写完整人设时，不要编造姓名/角色等完整设定；用选项或提示引导玩家下一步输入。
-必须提供 options（如语言选择、或「开始游戏」）。
-本步若仅为开局仪式短步骤，可短写；不要为凑字数灌水。请严格按双段协议输出。`;
-  const userJson = `${notes}本模拟器由 AI 引导开局。请严格按规则精简卡中的开局顺序执行第一步（如欢迎语、语言选择、提示输入「开始游戏」、设定面板等）。
-phase 设为「开局引导」。
+必须提供 options。本步若仅为开局仪式短步骤，可短写。请按双段协议输出。`;
+  const userJson = `${notes}本模拟器由 AI 引导开局。请严格按模拟器规则中的开局顺序执行第一步（如欢迎语、语言选择、提示输入「开始游戏」、设定面板等）。
 玩家尚未填写完整人设时，不要编造姓名/角色等完整设定；用选项或提示引导玩家下一步输入。
-必须提供 options（如语言选择、或「开始游戏」）。
-本步若仅为开局仪式短步骤，可短写；不要为凑字数灌水。`;
+必须提供 options。本步若仅为开局仪式短步骤，可短写。请只输出一个 JSON 对象。`;
   return chatPreferStream(
     settings,
     [
@@ -664,11 +695,11 @@ export async function generateTurn(
   const refreshContinuity =
     save.turns.length > 0 && save.turns.length % 5 === 0;
   const refreshHint = refreshContinuity
-    ? `\n【连贯刷新·第${nextIndex}回】continuityDelta 请输出当前局势总览（关系、双方认知、地点、未竟冲突、人设新侧面，8 条以内短句），将用于覆盖式更新连贯笔记。`
+    ? `\n【连贯刷新·第${nextIndex}回】continuityDelta 请输出当前局势总览（关系、双方认知、地点、未竟冲突、在场/随身道具与场景陈设，8 条以内短句），将用于覆盖式更新连贯笔记。`
     : '';
   const reinforce = rulesReinforceBlock(save, nextIndex);
-  const baseUser = `【角色写入】\n${notes}\n\n【历史】\n${buildHistory(save)}\n${reinforce}\n【本回合指令】\n${instruction}\n\n请推进下一回合，并给出选项。\n硬性要求：正文合计 2000～3000 汉字；必须实质推进剧情；summary 只写本回新事件；填写 continuityDelta。${refreshHint}`;
-  const userStream = `${baseUser}\n请严格按双段协议输出（<<<N>>>/<<<D:名>>>/<<<P:标题>>> + <<<META>>>）。`;
+  const baseUser = `【角色写入】\n${notes}\n\n【历史】\n${buildHistory(save)}\n${reinforce}\n【本回合指令】\n${instruction}\n\n请按模拟器规则推进下一回合并给出选项。正文可用 Markdown。须承接上一回道具与场景，禁止无故改背景。summary 与 continuityDelta 请记下本回相关道具/场景。${refreshHint}`;
+  const userStream = `${baseUser}\n请按双段协议输出（正文可用 Markdown + <<<META>>>）。`;
   const userJson = `${baseUser}\n请只输出一个 JSON 对象。`;
   return chatPreferStream(
     settings,

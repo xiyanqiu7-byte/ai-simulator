@@ -9,6 +9,7 @@ import {
   regenerateOptions,
 } from '../lib/api';
 import {
+  extractInlineOptions,
   parseAnyTurn,
   parseModelTurn,
   parseProseBlocks,
@@ -48,7 +49,8 @@ function writeDraft(draft: ActionDraft | null) {
 }
 
 export function PlayPage() {
-  const { activeSave, persistSave, api, packs, updatePack } = useStore();
+  const { activeSave, persistSave, api, packs, updatePack, prefs, setTheme } =
+    useStore();
   const nav = useNavigate();
   const [viewIndex, setViewIndex] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -176,6 +178,33 @@ export function PlayPage() {
   }, [turns, viewIndex, latestIndex]);
 
   const displayTurn = streamDraft ?? currentTurn;
+
+  /** 正文里写了 A/B/C 但 META 没带上时，从正文回填选项 */
+  const actionOptions: TurnOption[] = useMemo(() => {
+    if (streamDraft) return [];
+    if (!currentTurn) return [];
+    if (currentTurn.options?.length) return currentTurn.options;
+    return extractInlineOptions(
+      currentTurn.blocks.map((b) => b.text).join('\n'),
+    );
+  }, [streamDraft, currentTurn]);
+
+  // 回填成功则写回存档，避免每次都空
+  useEffect(() => {
+    if (!activeSave || !currentTurn) return;
+    if (currentTurn.options?.length) return;
+    if (!actionOptions.length) return;
+    if (viewIndex !== null && viewIndex !== currentTurn.index) return;
+    const turnsCopy = [...activeSave.turns];
+    const i = turnsCopy.findIndex((t) => t.id === currentTurn.id);
+    if (i < 0) return;
+    turnsCopy[i] = { ...turnsCopy[i], options: actionOptions };
+    persistSave({
+      ...activeSave,
+      turns: turnsCopy,
+      updatedAt: Date.now(),
+    });
+  }, [actionOptions, currentTurn?.id, activeSave?.id]);
 
   useEffect(() => {
     if (activeSave?.turns.length) {
@@ -496,15 +525,29 @@ export function PlayPage() {
           {activeSave.name}
           {displayTurn ? ` · ${displayTurn.index}` : ''}
         </h1>
-        <Link to="/settings" className="icon-btn" style={{ textDecoration: 'none' }}>
-          设定
-        </Link>
+        <div className="topbar-right">
+          <button
+            type="button"
+            className="icon-btn"
+            title={(prefs.theme || 'night') === 'night' ? '切换白天模式' : '切换深夜模式'}
+            aria-label="切换主题"
+            onClick={() =>
+              setTheme((prefs.theme || 'night') === 'night' ? 'day' : 'night')
+            }
+          >
+            {(prefs.theme || 'night') === 'night' ? '昼' : '夜'}
+          </button>
+          <Link to="/settings" className="icon-btn" style={{ textDecoration: 'none' }}>
+            设定
+          </Link>
+        </div>
       </header>
 
       <Stage
         key={streamDraft ? streamDraft.id : (currentTurn?.id ?? 'empty')}
         ref={stageRef}
         turn={displayTurn}
+        packTitle={activeSave.packTitle}
       >
         {error ? (
           <div className="error-block">
@@ -562,7 +605,7 @@ export function PlayPage() {
 
       {atLatest ? (
         <ActionBar
-          options={streamDraft ? [] : (currentTurn?.options ?? [])}
+          options={actionOptions}
           disabled={!canAct || loading}
           onChoose={onChoose}
           onCustom={onCustom}

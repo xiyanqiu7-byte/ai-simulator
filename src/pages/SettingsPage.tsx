@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { redistillRulesDigest } from '../lib/api';
 import { createPackFromMarkdown } from '../lib/pack';
 import {
   applyFullBackup,
@@ -18,8 +19,10 @@ export function SettingsPage() {
     setApi,
     prefs,
     setPrefs,
+    setTheme,
     packs,
     addPack,
+    updatePack,
     removePack,
     activeSave,
     persistSave,
@@ -27,12 +30,16 @@ export function SettingsPage() {
     refresh,
   } = useStore();
   const [draft, setDraft] = useState<ApiSettings>(api);
-  const [prefsDraft, setPrefsDraft] = useState<PlayerPrefs>(prefs);
+  const [prefsDraft, setPrefsDraft] = useState<PlayerPrefs>({
+    ...prefs,
+    theme: prefs.theme || 'night',
+  });
   const [importText, setImportText] = useState('');
   const [msg, setMsg] = useState('');
   const [notes, setNotes] = useState(activeSave?.characterNotes ?? '');
   const [syncPaste, setSyncPaste] = useState('');
   const [includeApi, setIncludeApi] = useState(false);
+  const [redistilling, setRedistilling] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const backupRef = useRef<HTMLInputElement>(null);
   const tapCount = useRef(0);
@@ -43,7 +50,7 @@ export function SettingsPage() {
   }
 
   function savePrefs() {
-    setPrefs(prefsDraft);
+    setPrefs({ ...prefsDraft, theme: prefsDraft.theme || 'night' });
     setMsg('阅读偏好已保存（下一回合生成起生效）');
   }
 
@@ -83,7 +90,34 @@ export function SettingsPage() {
       characterNotes: notes,
       updatedAt: Date.now(),
     });
-    setMsg('角色写入已更新');
+    setMsg('角色写入已保存');
+  }
+
+  async function onRedistillDigest() {
+    if (!activeSave) return;
+    if (!api.apiKey.trim()) {
+      setMsg('请先填写并保存 API Key');
+      return;
+    }
+    setRedistilling(true);
+    setMsg('正在重新精炼规则卡…');
+    try {
+      const digest = await redistillRulesDigest(api, activeSave.packRules);
+      persistSave({
+        ...activeSave,
+        rulesDigest: digest,
+        updatedAt: Date.now(),
+      });
+      const pack = packs.find((p) => p.id === activeSave.packId);
+      if (pack) {
+        updatePack({ ...pack, rulesDigest: digest });
+      }
+      setMsg('规则卡已重新精炼，下一回合起生效');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : '精炼失败');
+    } finally {
+      setRedistilling(false);
+    }
   }
 
   async function copyBackup() {
@@ -232,9 +266,42 @@ export function SettingsPage() {
         </div>
 
         <div className="card">
+          <h3>外观</h3>
+          <p className="muted">
+            白天模式偏明亮留白；深夜模式深色毛玻璃。阅读区左右边距已加宽。
+          </p>
+          <div className="theme-picker">
+            <button
+              type="button"
+              className={`theme-card${prefsDraft.theme === 'day' ? ' active' : ''}`}
+              onClick={() => {
+                setPrefsDraft((p) => ({ ...p, theme: 'day' }));
+                setTheme('day');
+              }}
+            >
+              <div className="theme-swatch day" aria-hidden />
+              <strong>白天模式</strong>
+              <small>浅色背景 · 柔光氛围</small>
+            </button>
+            <button
+              type="button"
+              className={`theme-card${(prefsDraft.theme || 'night') === 'night' ? ' active' : ''}`}
+              onClick={() => {
+                setPrefsDraft((p) => ({ ...p, theme: 'night' }));
+                setTheme('night');
+              }}
+            >
+              <div className="theme-swatch night" aria-hidden />
+              <strong>深夜模式</strong>
+              <small>深色毛玻璃 · 柔光光斑</small>
+            </button>
+          </div>
+        </div>
+
+        <div className="card">
           <h3>阅读偏好</h3>
           <p className="muted">
-            影响叙述侧重点（软约束）。规则禁止项优先；改完请保存，下一回合生成起生效。可随时改，不行就勾回去。
+            影响叙述侧重点；优先级低于模拟器的玩法与每回合展示格式。改完请保存，下一回合起生效。
           </p>
           <div className="field">
             <label>推进偏好</label>
@@ -393,6 +460,18 @@ export function SettingsPage() {
               ) : (
                 <p className="muted">尚未精炼规则卡（开局或下一章生成时会自动生成）。</p>
               )}
+              <button
+                type="button"
+                className="btn"
+                style={{ marginBottom: '0.75rem' }}
+                disabled={redistilling || !activeSave.packRules?.trim()}
+                onClick={() => void onRedistillDigest()}
+              >
+                {redistilling ? '精炼中…' : '重新精炼规则卡'}
+              </button>
+              <p className="muted" style={{ marginBottom: '0.75rem', fontSize: '0.85rem' }}>
+                旧精简卡可能丢掉「每回合展示」等要点；重炼后写入当前存档与模拟器缓存，下一回合生效。
+              </p>
               <p className="muted">模拟器原文（仅备份查看，对局不再每轮发送）：</p>
               <pre
                 style={{

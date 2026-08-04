@@ -29,6 +29,7 @@ interface Store {
   activeSave: SaveGame | null;
   setApi: (api: ApiSettings) => void;
   setPrefs: (prefs: PlayerPrefs) => void;
+  setTheme: (theme: 'day' | 'night') => void;
   addPack: (pack: SimulatorPack) => void;
   updatePack: (pack: SimulatorPack) => void;
   removePack: (id: string) => void;
@@ -63,6 +64,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const setPrefs = useCallback((next: PlayerPrefs) => {
     savePlayerPrefs(next);
     setPrefsState(next);
+  }, []);
+
+  const setTheme = useCallback((theme: 'day' | 'night') => {
+    setPrefsState((prev) => {
+      const next = { ...prev, theme };
+      savePlayerPrefs(next);
+      return next;
+    });
   }, []);
 
   const addPack = useCallback((pack: SimulatorPack) => {
@@ -120,6 +129,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       activeSave,
       setApi,
       setPrefs,
+      setTheme,
       addPack,
       updatePack,
       removePack,
@@ -136,6 +146,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       activeSave,
       setApi,
       setPrefs,
+      setTheme,
       addPack,
       updatePack,
       removePack,

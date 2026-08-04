@@ -6,7 +6,7 @@ export function HomePage() {
   const nav = useNavigate();
 
   return (
-    <div className="page">
+    <div className="page page-home">
       <header className="topbar">
         <span style={{ width: '2.4rem' }} />
         <h1>模拟器阅读器</h1>

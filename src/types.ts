@@ -112,14 +112,19 @@ export type FocusPref =
   | 'sensory'
   | 'relationship';
 
+export type UiTheme = 'day' | 'night';
+
 export interface PlayerPrefs {
   pace: PacePref;
   focus: FocusPref[];
+  /** 白天 / 深夜界面 */
+  theme?: UiTheme;
 }
 
 export const DEFAULT_PLAYER_PREFS: PlayerPrefs = {
   pace: 'balanced',
   focus: [],
+  theme: 'night',
 };
 
 export const PACE_OPTIONS: { id: PacePref; label: string; hint: string }[] = [
@@ -143,4 +148,5 @@ export const STORAGE_KEYS = {
   saves: 'simreader.saves',
   activeSaveId: 'simreader.activeSaveId',
   prefs: 'simreader.prefs',
+  theme: 'simreader.theme',
 } as const;
