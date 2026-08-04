@@ -68,20 +68,42 @@
   box-sizing: border-box;
 }
 
+/* 铺满真视口：iOS/弧形屏上 height:100% 常偏矮，底下露出一块黑 */
+html {
+  height: 100%;
+  background-color: var(--bg);
+  background-image: var(--body-bg);
+  background-attachment: scroll;
+}
+
 html,
 body,
 #root {
-  height: 100%;
   margin: 0;
+  min-height: 100%;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
 }
 
 body {
   font-family: var(--font-ui);
-  background: var(--body-bg);
-  background-attachment: fixed;
+  background-color: var(--bg);
+  background-image: var(--body-bg);
+  /* fixed 在 iOS 上容易整块不绘制，改 scroll */
+  background-attachment: scroll;
+  background-repeat: no-repeat;
+  background-size: cover;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   line-height: 1.55;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
 }
 
 button,
@@ -97,8 +119,11 @@ a {
 }
 
 .app-shell {
-  height: 100%;
-  max-height: 100%;
+  flex: 1;
+  width: 100%;
+  min-height: 100%;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
   max-width: var(--max);
   margin: 0 auto;
   display: flex;
@@ -115,11 +140,14 @@ a {
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  /* 首页等可滚动页：底部避开 Home 条，背景仍铺满 */
+  padding-bottom: max(0.75rem, var(--safe-bottom));
 }
 
 .page-play {
   position: relative;
   overflow: hidden;
+  padding-bottom: 0; /* 播放页由 action-bar 自己吃 safe-area */
 }
 
 .topbar {
