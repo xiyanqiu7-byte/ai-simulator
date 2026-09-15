@@ -387,6 +387,46 @@ async function sleep(ms: number) {
   return new Promise((r) => window.setTimeout(r, ms));
 }
 
+/**
+ * Chromium keepalive 请求体上限 64KiB，超了 fetch 会直接抛 TypeError，
+ * 界面看起来像「网络错误」。长存档（上一章全文+规则卡）很容易超过。
+ */
+const KEEPALIVE_BODY_MAX = 60 * 1024;
+
+function utf8Bytes(text: string): number {
+  return new Blob([text]).size;
+}
+
+function postChatInit(settings: ApiSettings, body: string): RequestInit {
+  const bytes = utf8Bytes(body);
+  const keepalive = bytes < KEEPALIVE_BODY_MAX;
+  if (!keepalive) {
+    console.info('[simreader] skip keepalive, body', bytes, 'bytes');
+  }
+  return {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${settings.apiKey}`,
+    },
+    body,
+    keepalive,
+  };
+}
+
+function networkFailMessage(err: unknown, body: string): string {
+  const bytes = utf8Bytes(body);
+  const detail = err instanceof Error ? err.message : String(err);
+  console.warn('[simreader] fetch failed', { bytes, detail, err });
+  if (/Failed to fetch|NetworkError|Load failed|network/i.test(detail)) {
+    if (bytes >= KEEPALIVE_BODY_MAX) {
+      return '这份存档上下文较长，请求发送失败。请点重试；若仍失败，可新开一档或精简规则后再试。';
+    }
+    return '网络请求失败（可能因锁屏或切到其他应用）。请保持本页在前台，或点重试。';
+  }
+  return `请求发送失败：${detail.slice(0, 120)}`;
+}
+
 async function chat(
   settings: ApiSettings,
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
@@ -408,23 +448,16 @@ async function chat(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     let res: Response;
+    const body = buildChatBody(settings, messages, {
+      withJsonFormat: useJsonFormat,
+    });
     try {
-      res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${settings.apiKey}`,
-        },
-        body: buildChatBody(settings, messages, {
-          withJsonFormat: useJsonFormat,
-        }),
-        keepalive: true,
-      });
-    } catch {
+      res = await fetch(url, postChatInit(settings, body));
+    } catch (e) {
       lastError = new ApiError(
         attempt < maxAttempts
           ? `网络中断，正在重试（${attempt}/${maxAttempts}）…`
-          : '网络请求失败（可能因锁屏或切到其他应用）。请保持本页在前台，或点重试。',
+          : networkFailMessage(e, body),
       );
       if (attempt < maxAttempts) {
         await sleep(800 * attempt);
@@ -509,24 +542,15 @@ async function chatStream(
   const promptChars = messages.reduce((n, m) => n + m.content.length, 0);
   const t0 = performance.now();
 
+  const body = buildChatBody(settings, messages, {
+    withJsonFormat: false,
+    stream: true,
+  });
   let res: Response;
   try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${settings.apiKey}`,
-      },
-      body: buildChatBody(settings, messages, {
-        withJsonFormat: false,
-        stream: true,
-      }),
-      keepalive: true,
-    });
-  } catch {
-    throw new ApiError(
-      '网络请求失败（可能因锁屏或切到其他应用）。请保持本页在前台，或点重试。',
-    );
+    res = await fetch(url, postChatInit(settings, body));
+  } catch (e) {
+    throw new ApiError(networkFailMessage(e, body));
   }
 
   if (!res.ok) {
